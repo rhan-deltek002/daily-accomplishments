@@ -9,10 +9,12 @@ import os
 import re
 import sys
 import json
+import random
 import sqlite3
 import shutil
 import tempfile
 import threading
+from datetime import datetime
 from typing import Optional
 
 from starlette.background import BackgroundTask
@@ -44,10 +46,52 @@ def _load_config() -> dict:
     return {}
 
 
-def _save_config(data: dict) -> None:
+def _save_config(updates: dict) -> None:
+    """Merge updates into the config file (never overwrites unrelated keys)."""
+    config = _load_config()
+    config.update(updates)
     os.makedirs(_DATA_DIR, exist_ok=True)
     with open(_CONFIG_PATH, "w") as f:
-        json.dump(data, f, indent=2)
+        json.dump(config, f, indent=2)
+
+
+# ---------------------------------------------------------------------------
+# Creative name generator
+# ---------------------------------------------------------------------------
+_ADJECTIVES = [
+    "golden", "amber", "azure", "crimson", "emerald", "sapphire", "silver",
+    "stellar", "cosmic", "lunar", "radiant", "luminous", "serene", "vibrant",
+    "timeless", "ancient", "vivid", "crystal", "noble", "twilight",
+]
+_NOUNS = [
+    "chronicle", "archive", "vault", "tapestry", "ledger", "codex", "atlas",
+    "memoir", "saga", "annals", "folio", "compendium", "treasury", "scroll",
+    "tome", "almanac", "mosaic", "anthology", "journal", "registry",
+]
+
+
+def _creative_name() -> str:
+    return f"{random.choice(_ADJECTIVES)}_{random.choice(_NOUNS)}"
+
+
+# ---------------------------------------------------------------------------
+# DB history helpers  (last 10 paths, stored in config.json)
+# ---------------------------------------------------------------------------
+_HISTORY_LIMIT = 10
+
+
+def _add_to_history(path: str, display_name: str, db_type: str = "active") -> None:
+    config = _load_config()
+    history = config.get("db_history", [])
+    # Remove any existing entry for this path so it moves to top
+    history = [h for h in history if h["path"] != path]
+    history.insert(0, {
+        "path": path,
+        "display_name": display_name,
+        "last_used": datetime.now().isoformat(),
+        "type": db_type,
+    })
+    _save_config({"db_history": history[:_HISTORY_LIMIT]})
 
 
 # Priority: config file > ACCOMPLISHMENTS_DB env var > default
@@ -57,6 +101,7 @@ DB_PATH: str = _config.get("db_path") or os.environ.get("ACCOMPLISHMENTS_DB") or
 # Ensure the database directory exists and initialise
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 database.init_db(DB_PATH)
+_add_to_history(DB_PATH, os.path.splitext(os.path.basename(DB_PATH))[0], "active")
 
 def _is_wsl() -> bool:
     try:
@@ -117,10 +162,11 @@ mcp = FastMCP(
 
         "Use get_summary for annual performance review preparation. "
 
-        "To merge databases: call get_merge_candidates with the file paths, review the "
-        "results carefully — use your judgment to identify near-duplicates that differ only "
-        "in wording, ask the user when unsure — then call execute_merge with the final "
-        "curated list of records. Never skip the review step."
+        "To merge databases: warn the user first that this can be token-intensive for large "
+        "databases (all records are loaded into context). Then call get_merge_candidates with "
+        "the file paths, review results carefully — use your judgment to identify near-duplicates "
+        "that differ only in wording, ask the user when unsure — then call execute_merge with "
+        "the final curated list. Never skip the review step."
     ),
 )
 
@@ -275,6 +321,10 @@ def get_merge_candidates(source_paths: list[str]) -> dict:
     """
     Read records from multiple database files and surface potential duplicates.
 
+    ⚠️  Cost warning: all records from every source file are loaded into context.
+    This can be token-intensive for large databases — warn the user before calling
+    this on databases with hundreds of records.
+
     Use this first when the user wants to merge databases. Returns all records
     labelled by source, with exact duplicates pre-flagged. Review the
     unique_records list for near-duplicates (same accomplishment described
@@ -311,15 +361,17 @@ def execute_merge(records: list[dict], output_path: Optional[str] = None) -> dic
                      ~/.daily-accomplishments/merged_<timestamp>.db
                      Windows paths are converted automatically on WSL.
     """
-    from datetime import datetime as _dt
     if output_path is None:
-        ts = _dt.now().strftime("%Y%m%d_%H%M%S")
-        out = os.path.join(_DATA_DIR, f"merged_{ts}.db")
+        name = _creative_name()
+        out = os.path.join(_DATA_DIR, f"{name}_merge.db")
     else:
         out = _normalize_path(os.path.expanduser(output_path.strip().strip('"\'') ))
+        name = os.path.splitext(os.path.basename(out))[0]
 
     os.makedirs(os.path.dirname(out), exist_ok=True)
-    return database.execute_merge(records, out)
+    result = database.execute_merge(records, out)
+    _add_to_history(out, name, "merge")
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -402,7 +454,9 @@ async def api_save_settings(body: dict):
         return JSONResponse(status_code=400, content={"error": f"Could not open database: {e}"})
 
     DB_PATH = new_path
+    display_name = os.path.splitext(os.path.basename(new_path))[0]
     _save_config({"db_path": new_path})
+    _add_to_history(new_path, display_name, "active")
     return JSONResponse(content={"success": True, "db_path": DB_PATH, "count": count})
 
 
@@ -435,10 +489,11 @@ async def api_delete(id: int):
 async def api_export():
     if not os.path.exists(DB_PATH):
         return JSONResponse(status_code=404, content={"error": "Database not found"})
+    filename = f"{_creative_name()}_export.db"
     return FileResponse(
         DB_PATH,
         media_type="application/octet-stream",
-        filename="accomplishments.db",
+        filename=filename,
     )
 
 
@@ -459,11 +514,11 @@ async def api_merge(file: UploadFile = File(...)):
         return JSONResponse(status_code=400, content={"error": f"Invalid database file: {e}"})
 
     # Create the output as a copy of the active DB — the active DB is never modified
-    output_path = source_path.replace("_source.db", "_merged.db")
+    name = _creative_name()
+    output_path = source_path.replace("_source.db", f"_{name}_merge.db")
     shutil.copy2(DB_PATH, output_path)
 
     try:
-        # Run migrations on source so columns match, then merge into the copy
         database.init_db(source_path)
         result = database.merge_accomplishments(output_path, source_path)
     except Exception as e:
@@ -471,7 +526,6 @@ async def api_merge(file: UploadFile = File(...)):
         os.unlink(output_path)
         return JSONResponse(status_code=500, content={"error": f"Merge failed: {e}"})
 
-    # Clean up both temp files after the response is sent
     def cleanup():
         for p in (source_path, output_path):
             try:
@@ -479,18 +533,26 @@ async def api_merge(file: UploadFile = File(...)):
             except OSError:
                 pass
 
+    download_name = f"{name}_merge.db"
     headers = {
         "X-Merge-Added": str(result["added"]),
         "X-Merge-Skipped": str(result["skipped"]),
         "X-Merge-Total": str(result["total_source"]),
+        "X-Merge-Name": download_name,
     }
     return FileResponse(
         output_path,
         media_type="application/octet-stream",
-        filename="merged_accomplishments.db",
+        filename=download_name,
         headers=headers,
         background=BackgroundTask(cleanup),
     )
+
+
+@web_app.get("/api/db-history")
+async def api_db_history():
+    config = _load_config()
+    return JSONResponse(content=config.get("db_history", []))
 
 
 # ---------------------------------------------------------------------------

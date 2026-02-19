@@ -122,6 +122,24 @@
     .import-feedback.err { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; display: block; }
     .import-note { font-size: 0.78rem; color: var(--muted); margin-top: 0.5rem; }
 
+    /* ── DB history ── */
+    .history-item {
+      display: flex; align-items: center; gap: 0.6rem;
+      padding: 0.45rem 0; border-bottom: 1px solid var(--border);
+    }
+    .history-item:last-child { border-bottom: none; }
+    .history-icon { font-size: 0.85rem; flex-shrink: 0; }
+    .history-info { flex: 1; min-width: 0; }
+    .history-name { font-size: 0.82rem; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .history-path { font-size: 0.72rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: monospace; }
+    .history-load-btn {
+      padding: 0.3rem 0.65rem; font-size: 0.75rem; border-radius: 5px; cursor: pointer;
+      border: 1px solid var(--border); background: var(--surface); color: var(--muted);
+      flex-shrink: 0;
+    }
+    .history-load-btn:hover { border-color: var(--primary); color: var(--primary); }
+    .history-load-btn.current { border-color: var(--primary); color: var(--primary); background: var(--primary-bg); cursor: default; }
+
     /* ── Tag visualizer ── */
     .tag-viz { display: flex; flex-direction: column; gap: 2rem; }
 
@@ -539,6 +557,11 @@
             </div>
           </div>
           <div class="import-feedback" id="db-path-feedback"></div>
+
+          <div id="db-history-wrap" style="margin-top:1.25rem;display:none">
+            <p class="import-note" style="margin-bottom:0.6rem">Recent databases</p>
+            <div id="db-history-list"></div>
+          </div>
         </div>
 
         <div class="settings-section">
@@ -826,6 +849,83 @@
     } catch (e) {
       document.getElementById('db-path-display').textContent = e.message;
     }
+    loadHistory();
+  }
+
+  async function loadHistory() {
+    try {
+      const r = await fetch('/api/db-history');
+      if (!r.ok) return;
+      const history = await r.json();
+      const wrap = document.getElementById('db-history-wrap');
+      const list = document.getElementById('db-history-list');
+
+      if (!history.length) { wrap.style.display = 'none'; return; }
+      wrap.style.display = '';
+
+      const activePath = document.getElementById('db-path-display').textContent;
+      const TYPE_ICON = { active: '🗄️', merge: '🔀', export: '📤' };
+
+      list.innerHTML = history.map(h => {
+        const isCurrent = h.path === activePath;
+        const icon = TYPE_ICON[h.type] || '🗄️';
+        const ago = timeAgo(h.last_used);
+        return `
+          <div class="history-item">
+            <span class="history-icon">${icon}</span>
+            <div class="history-info">
+              <div class="history-name">${esc(h.display_name)}</div>
+              <div class="history-path" title="${esc(h.path)}">${esc(h.path)}</div>
+            </div>
+            <span style="font-size:0.7rem;color:var(--muted);flex-shrink:0">${ago}</span>
+            <button class="history-load-btn ${isCurrent ? 'current' : ''}"
+              ${isCurrent ? 'disabled' : `onclick="loadFromHistory('${esc(h.path)}'  )"`}>
+              ${isCurrent ? 'Active' : 'Load'}
+            </button>
+          </div>`;
+      }).join('');
+    } catch { /* ignore */ }
+  }
+
+  async function loadFromHistory(path) {
+    const feedback = document.getElementById('db-path-feedback');
+    feedback.textContent = 'Switching…';
+    feedback.className = 'import-feedback';
+    feedback.style.display = 'block';
+    try {
+      const r = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ db_path: path }),
+      });
+      const data = await r.json();
+      if (!r.ok) {
+        feedback.textContent = '✕ ' + (data.error || 'Failed');
+        feedback.className = 'import-feedback err';
+      } else {
+        document.getElementById('db-path-display').textContent = data.db_path;
+        feedback.textContent = `✓ Now using ${data.db_path} — ${data.count} record${data.count !== 1 ? 's' : ''} loaded`;
+        feedback.className = 'import-feedback ok';
+        loadHistory();
+        loadStats();
+        loadData(periodToParams(currentPeriod));
+        setTimeout(() => { feedback.style.display = 'none'; }, 5000);
+      }
+    } catch (e) {
+      feedback.textContent = '✕ ' + e.message;
+      feedback.className = 'import-feedback err';
+    }
+  }
+
+  function timeAgo(iso) {
+    if (!iso) return '';
+    const diff = Date.now() - new Date(iso).getTime();
+    const m = Math.floor(diff / 60000);
+    if (m < 1) return 'just now';
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    return `${Math.floor(h / 24)}d ago`;
   }
 
   async function mergeDb(input) {
@@ -864,7 +964,8 @@
       a.click();
       URL.revokeObjectURL(url);
 
-      feedback.textContent = `✓ Done — ${added} new record${added != 1 ? 's' : ''} from ${total} merged, ${skipped} duplicate${skipped != 1 ? 's' : ''} skipped. Merged database downloaded.`;
+      const name = r.headers.get('X-Merge-Name') || 'merged_accomplishments.db';
+      feedback.textContent = `✓ ${added} new record${added != 1 ? 's' : ''} from ${total} merged, ${skipped} duplicate${skipped != 1 ? 's' : ''} skipped — saved as "${name}"`;
       feedback.className = 'import-feedback ok';
     } catch (e) {
       feedback.textContent = '✕ ' + e.message;
