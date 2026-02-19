@@ -29,9 +29,24 @@ Think of it as a *work journal that writes itself.*
 
 ## Installation
 
-> **Recommended:** Use the manual install below so you can choose the MCP scope. The install scripts default to project scope, which means the MCP is only active when Claude Code is opened inside this specific directory — most users want it available everywhere.
+### Step 1: Clone the repo
 
-### Recommended: manual install (choose your scope)
+```bash
+git clone https://github.com/rhan-deltek002/daily-accomplishments.git
+cd daily-accomplishments
+```
+
+### Step 2: Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### Step 3: Register the MCP
+
+> **Recommended:** Use the manual command below so you can choose the scope. The install scripts default to **project scope**, meaning the MCP is only active when Claude Code is opened inside this directory — most users want it available everywhere.
+
+#### Recommended: manual install (choose your scope)
 
 Register with `--scope user` to make it available **across all your projects**:
 
@@ -51,26 +66,20 @@ claude mcp add daily-accomplishments --scope user ^
 
 Use `--scope project` instead if you intentionally want it limited to a single project directory.
 
-### Quick install scripts (project scope only)
+#### Quick install scripts (project scope only)
 
 These scripts register the MCP at **project scope** — only active when Claude Code is opened inside this directory.
 
-#### Linux / macOS / WSL
-
 ```bash
-cd daily-accomplishments
+# Linux / macOS / WSL
 ./install.sh
-```
 
-Custom database location:
-```bash
+# Custom database location
 ./install.sh /path/to/my-accomplishments.db
 ```
 
-#### Windows
-
 ```bat
-cd daily-accomplishments
+rem Windows
 install.bat
 ```
 
