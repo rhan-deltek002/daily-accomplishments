@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Daily Accomplishments</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #f1f5f9;
+      --surface:   #ffffff;
+      --border:    #e2e8f0;
+      --text:      #1e293b;
+      --muted:     #64748b;
+      --primary:   #6366f1;
+      --primary-h: #4f46e5;
+
+      --cat-feature:        #3b82f6;
+      --cat-bugfix:         #ef4444;
+      --cat-learning:       #8b5cf6;
+      --cat-review:         #14b8a6;
+      --cat-design:         #ec4899;
+      --cat-documentation:  #6b7280;
+      --cat-refactor:       #f59e0b;
+      --cat-infrastructure: #10b981;
+      --cat-meeting:        #6366f1;
+      --cat-other:          #94a3b8;
+
+      --imp-high:   #ef4444;
+      --imp-medium: #f59e0b;
+      --imp-low:    #10b981;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      height: 60px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    header h1 { font-size: 1.1rem; font-weight: 700; color: var(--primary); flex: 1; cursor: pointer; }
+    header h1:hover { opacity: 0.8; }
+    header .header-btn {
+      background: none; border: 1px solid var(--border); border-radius: 6px;
+      padding: 0.35rem 0.75rem; font-size: 0.8rem; cursor: pointer; color: var(--muted);
+      text-decoration: none; display: inline-flex; align-items: center;
+    }
+    header .header-btn:hover { border-color: var(--primary); color: var(--primary); }
+    header .header-btn.active { border-color: var(--primary); color: var(--primary); background: #eef2ff; }
+
+    /* ── Settings view ── */
+    .settings-view { max-width: 560px; }
+    .settings-section {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 1.25rem 1.4rem; margin-bottom: 1.25rem;
+    }
+    .settings-section h3 {
+      font-size: 0.78rem; text-transform: uppercase; letter-spacing: .07em;
+      color: var(--muted); margin-bottom: 1rem;
+    }
+    .settings-row { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+    .settings-row label { font-size: 0.82rem; color: var(--muted); min-width: 80px; }
+    .db-path {
+      font-size: 0.82rem; font-family: monospace; background: var(--bg);
+      border: 1px solid var(--border); border-radius: 6px; padding: 0.45rem 0.7rem;
+      flex: 1; word-break: break-all; color: var(--text);
+    }
+    .settings-btn {
+      padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.85rem; cursor: pointer;
+      border: 1px solid var(--border); background: var(--surface); color: var(--text);
+      text-decoration: none; display: inline-flex; align-items: center; gap: 0.4rem;
+    }
+    .settings-btn:hover { border-color: var(--primary); color: var(--primary); }
+    .settings-btn.primary { background: var(--primary); border-color: var(--primary); color: white; font-weight: 600; }
+    .settings-btn.primary:hover { background: var(--primary-h); }
+    .import-feedback {
+      font-size: 0.82rem; padding: 0.5rem 0.8rem; border-radius: 6px; margin-top: 0.75rem; display: none;
+    }
+    .import-feedback.ok  { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; display: block; }
+    .import-feedback.err { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; display: block; }
+    .import-note { font-size: 0.78rem; color: var(--muted); margin-top: 0.5rem; }
+
+    /* ── Stats bar ── */
+    .stats-bar {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 1px;
+      background: var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .stat {
+      background: var(--surface);
+      padding: 0.9rem 1.25rem;
+      text-align: center;
+    }
+    .stat .value { font-size: 1.6rem; font-weight: 700; color: var(--text); }
+    .stat .label { font-size: 0.72rem; color: var(--muted); margin-top: 2px; text-transform: uppercase; letter-spacing: .04em; }
+    .stat.highlight .value { color: var(--primary); }
+
+    /* ── Layout ── */
+    .layout { display: flex; min-height: calc(100vh - 100px); }
+
+    /* ── Sidebar filters ── */
+    aside {
+      width: 240px;
+      min-width: 240px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+    aside h2 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+    .filter-group { display: flex; flex-direction: column; gap: 0.5rem; }
+    .filter-group label { font-size: 0.78rem; color: var(--muted); font-weight: 500; }
+    .filter-group input,
+    .filter-group select {
+      width: 100%; padding: 0.45rem 0.6rem; border: 1px solid var(--border);
+      border-radius: 6px; font-size: 0.82rem; background: var(--bg); color: var(--text);
+      outline: none;
+    }
+    .filter-group input:focus,
+    .filter-group select:focus { border-color: var(--primary); }
+    .apply-btn {
+      width: 100%; padding: 0.55rem; background: var(--primary); color: white;
+      border: none; border-radius: 6px; font-size: 0.85rem; font-weight: 600;
+      cursor: pointer; margin-top: 0.25rem;
+    }
+    .apply-btn:hover { background: var(--primary-h); }
+    .clear-btn {
+      width: 100%; padding: 0.45rem; background: none; color: var(--muted);
+      border: 1px solid var(--border); border-radius: 6px; font-size: 0.8rem;
+      cursor: pointer;
+    }
+    .clear-btn:hover { border-color: var(--primary); color: var(--primary); }
+
+    .period-btns { display: flex; flex-direction: column; gap: 0.3rem; }
+    .period-btn {
+      width: 100%; text-align: left; padding: 0.45rem 0.6rem;
+      background: none; border: 1px solid var(--border); border-radius: 6px;
+      font-size: 0.82rem; cursor: pointer; color: var(--text);
+    }
+    .period-btn:hover { border-color: var(--primary); color: var(--primary); }
+    .period-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+    /* ── Main ── */
+    main {
+      flex: 1;
+      padding: 1.5rem;
+      overflow-y: auto;
+    }
+
+    .view-toggle {
+      display: flex; gap: 0.5rem; margin-bottom: 1.25rem; align-items: center;
+    }
+    .view-toggle span { font-size: 0.82rem; color: var(--muted); margin-right: 0.25rem; }
+    .toggle-btn {
+      padding: 0.4rem 0.85rem; border: 1px solid var(--border); border-radius: 6px;
+      font-size: 0.82rem; cursor: pointer; background: var(--surface); color: var(--text);
+    }
+    .toggle-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+    /* ── Timeline ── */
+    .day-group { margin-bottom: 2rem; }
+    .day-header {
+      display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem;
+    }
+    .day-label { font-size: 0.85rem; font-weight: 700; color: var(--text); }
+    .day-count {
+      font-size: 0.72rem; padding: 2px 8px; background: var(--bg);
+      border: 1px solid var(--border); border-radius: 99px; color: var(--muted);
+    }
+    .day-line { flex: 1; height: 1px; background: var(--border); }
+
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 1rem 1.1rem; margin-bottom: 0.6rem;
+      transition: box-shadow 0.15s;
+    }
+    .card:hover { box-shadow: 0 2px 12px rgba(0,0,0,.07); }
+
+    .card-header { display: flex; align-items: flex-start; gap: 0.6rem; margin-bottom: 0.4rem; }
+    .impact-dot {
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 5px;
+    }
+    .impact-dot.high   { background: var(--imp-high); }
+    .impact-dot.medium { background: var(--imp-medium); }
+    .impact-dot.low    { background: var(--imp-low); }
+
+    .card-title { font-size: 0.92rem; font-weight: 600; line-height: 1.3; flex: 1; }
+    .card-description {
+      font-size: 0.82rem; color: var(--muted); line-height: 1.5;
+      margin-left: 1.4rem; margin-bottom: 0.6rem;
+    }
+    .card-footer {
+      display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+      margin-left: 1.4rem;
+    }
+    .cat-badge {
+      font-size: 0.7rem; padding: 2px 8px; border-radius: 99px; font-weight: 500;
+      color: white; text-transform: capitalize;
+    }
+    .tag-badge {
+      font-size: 0.7rem; padding: 2px 7px; border-radius: 99px;
+      background: var(--bg); border: 1px solid var(--border); color: var(--muted);
+    }
+    .card-time { font-size: 0.7rem; color: var(--muted); margin-left: auto; }
+
+    /* ── Annual review ── */
+    .monthly-grid { display: flex; flex-direction: column; gap: 1.5rem; }
+    .month-section {}
+    .month-header {
+      display: flex; align-items: center; gap: 0.75rem;
+      padding: 0.6rem 1rem; background: var(--surface);
+      border: 1px solid var(--border); border-radius: 8px 8px 0 0;
+      cursor: pointer;
+    }
+    .month-name { font-size: 0.9rem; font-weight: 700; flex: 1; }
+    .month-stats { display: flex; gap: 0.75rem; font-size: 0.75rem; color: var(--muted); }
+    .month-cards { border: 1px solid var(--border); border-top: none; border-radius: 0 0 8px 8px; padding: 0.75rem; }
+
+    /* ── Empty state ── */
+    .empty {
+      text-align: center; padding: 4rem 2rem; color: var(--muted);
+    }
+    .empty .icon { font-size: 3rem; margin-bottom: 1rem; }
+    .empty h3 { font-size: 1rem; margin-bottom: 0.5rem; color: var(--text); }
+    .empty p { font-size: 0.85rem; }
+
+    /* ── Loading ── */
+    .loading {
+      text-align: center; padding: 3rem; color: var(--muted); font-size: 0.9rem;
+    }
+
+    /* ── Result count ── */
+    .result-info { font-size: 0.8rem; color: var(--muted); margin-bottom: 1rem; }
+
+    /* ── Card actions ── */
+    .card { position: relative; }
+    .card-actions {
+      position: absolute; top: 0.7rem; right: 0.7rem;
+      display: none; gap: 0.3rem;
+    }
+    .card:hover .card-actions { display: flex; }
+    .action-btn {
+      padding: 0.25rem 0.5rem; border-radius: 5px; font-size: 0.72rem;
+      cursor: pointer; border: 1px solid var(--border); background: var(--surface);
+      color: var(--muted); line-height: 1;
+    }
+    .action-btn:hover { border-color: var(--primary); color: var(--primary); }
+    .action-btn.delete:hover { border-color: #ef4444; color: #ef4444; }
+
+    /* ── Context badge ── */
+    .context-badge {
+      font-size: 0.68rem; padding: 2px 7px; border-radius: 4px; font-weight: 600;
+      letter-spacing: .03em; text-transform: uppercase; border: 1px solid;
+    }
+    .context-work         { color: #1d4ed8; background: #eff6ff; border-color: #bfdbfe; }
+    .context-side_project { color: #7c3aed; background: #f5f3ff; border-color: #ddd6fe; }
+    .context-personal     { color: #065f46; background: #ecfdf5; border-color: #a7f3d0; }
+    .context-other        { color: #92400e; background: #fffbeb; border-color: #fde68a; }
+
+    /* ── Edit modal ── */
+    .modal-backdrop {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.4); z-index: 100; align-items: center; justify-content: center;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal {
+      background: var(--surface); border-radius: 12px; padding: 1.5rem;
+      width: 520px; max-width: 95vw; max-height: 90vh; overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0,0,0,.25);
+    }
+    .modal h3 { font-size: 1rem; font-weight: 700; margin-bottom: 1.25rem; }
+    .modal .field { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 0.9rem; }
+    .modal .field label { font-size: 0.78rem; color: var(--muted); font-weight: 500; }
+    .modal .field input,
+    .modal .field textarea,
+    .modal .field select {
+      padding: 0.5rem 0.65rem; border: 1px solid var(--border); border-radius: 6px;
+      font-size: 0.85rem; background: var(--bg); color: var(--text); outline: none;
+      font-family: inherit;
+    }
+    .modal .field textarea { min-height: 80px; resize: vertical; }
+    .modal .field input:focus,
+    .modal .field textarea:focus,
+    .modal .field select:focus { border-color: var(--primary); }
+    .modal-footer { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1.25rem; }
+    .modal-footer button { padding: 0.5rem 1.1rem; border-radius: 6px; font-size: 0.85rem; cursor: pointer; }
+    .btn-cancel { background: none; border: 1px solid var(--border); color: var(--muted); }
+    .btn-cancel:hover { border-color: var(--primary); color: var(--primary); }
+    .btn-save { background: var(--primary); border: none; color: white; font-weight: 600; }
+    .btn-save:hover { background: var(--primary-h); }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1 onclick="setView('timeline')">Daily Accomplishments</h1>
+  <button class="header-btn" id="btn-settings" onclick="setView('settings')">⚙ Settings</button>
+  <button class="header-btn" onclick="refresh()">↻ Refresh</button>
+</header>
+
+<div class="stats-bar">
+  <div class="stat highlight" id="stat-total">
+    <div class="value">—</div>
+    <div class="label">Total</div>
+  </div>
+  <div class="stat" id="stat-today">
+    <div class="value">—</div>
+    <div class="label">Today</div>
+  </div>
+  <div class="stat" id="stat-week">
+    <div class="value">—</div>
+    <div class="label">This Week</div>
+  </div>
+  <div class="stat" id="stat-year">
+    <div class="value">—</div>
+    <div class="label">This Year</div>
+  </div>
+  <div class="stat" id="stat-high">
+    <div class="value">—</div>
+    <div class="label">High Impact</div>
+  </div>
+</div>
+
+<div class="layout">
+  <aside>
+    <h2>Filters</h2>
+
+    <div class="filter-group">
+      <label>Search</label>
+      <input type="text" id="filter-search" placeholder="keyword…" oninput="debounceSearch()">
+    </div>
+
+    <div class="filter-group">
+      <label>From</label>
+      <input type="date" id="filter-from">
+    </div>
+
+    <div class="filter-group">
+      <label>To</label>
+      <input type="date" id="filter-to">
+    </div>
+
+    <div class="filter-group">
+      <label>Category</label>
+      <select id="filter-category">
+        <option value="">All categories</option>
+        <option value="feature">Feature</option>
+        <option value="bugfix">Bug Fix</option>
+        <option value="learning">Learning</option>
+        <option value="review">Review</option>
+        <option value="design">Design</option>
+        <option value="documentation">Documentation</option>
+        <option value="refactor">Refactor</option>
+        <option value="infrastructure">Infrastructure</option>
+        <option value="meeting">Meeting</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+
+    <div class="filter-group">
+      <label>Impact</label>
+      <select id="filter-impact">
+        <option value="">All levels</option>
+        <option value="high">High</option>
+        <option value="medium">Medium</option>
+        <option value="low">Low</option>
+      </select>
+    </div>
+
+    <div class="filter-group">
+      <label>Context</label>
+      <select id="filter-context">
+        <option value="">All contexts</option>
+        <option value="work">Work</option>
+        <option value="side_project">Side Project</option>
+        <option value="personal">Personal</option>
+      </select>
+    </div>
+
+    <button class="apply-btn" onclick="applyFilters()">Apply Filters</button>
+    <button class="clear-btn" onclick="clearFilters()">Clear</button>
+
+    <hr style="border:none;border-top:1px solid var(--border)">
+
+    <h2>Quick Range</h2>
+    <div class="period-btns">
+      <button class="period-btn" data-period="today" onclick="setPeriod(this)">Today</button>
+      <button class="period-btn" data-period="this_week" onclick="setPeriod(this)">This Week</button>
+      <button class="period-btn" data-period="this_month" onclick="setPeriod(this)">This Month</button>
+      <button class="period-btn active" data-period="this_year" onclick="setPeriod(this)">This Year</button>
+      <button class="period-btn" data-period="last_year" onclick="setPeriod(this)">Last Year</button>
+      <button class="period-btn" data-period="all_time" onclick="setPeriod(this)">All Time</button>
+    </div>
+  </aside>
+
+  <main>
+    <div class="view-toggle" id="view-toggle">
+      <span>View:</span>
+      <button class="toggle-btn active" id="btn-timeline" onclick="setView('timeline')">Timeline</button>
+      <button class="toggle-btn" id="btn-annual" onclick="setView('annual')">Annual Review</button>
+    </div>
+
+    <div id="result-info" class="result-info"></div>
+    <div id="content"><div class="loading">Loading…</div></div>
+
+    <div id="settings-panel" style="display:none">
+      <div class="settings-view">
+        <div class="settings-section">
+          <h3>Database</h3>
+          <div class="settings-row">
+            <label>Location</label>
+            <span class="db-path" id="db-path-display">Loading…</span>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <h3>Export &amp; Import</h3>
+          <div class="settings-row">
+            <a class="settings-btn primary" href="/api/export" download="accomplishments.db">↓ Export DB</a>
+            <button class="settings-btn" onclick="document.getElementById('import-input').click()">↑ Import DB</button>
+            <input type="file" id="import-input" accept=".db" style="display:none" onchange="importDb(this)">
+          </div>
+          <p class="import-note">Importing replaces the current database. A backup is saved automatically as <code>accomplishments.db.bak</code>.</p>
+          <div class="import-feedback" id="import-feedback"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Edit Modal -->
+<div class="modal-backdrop" id="edit-modal" onclick="closeModal(event)">
+  <div class="modal">
+    <h3>Edit Accomplishment</h3>
+    <div class="field">
+      <label>Title</label>
+      <input type="text" id="edit-title">
+    </div>
+    <div class="field">
+      <label>Description</label>
+      <textarea id="edit-description"></textarea>
+    </div>
+    <div class="field">
+      <label>Category</label>
+      <select id="edit-category">
+        <option value="feature">Feature</option>
+        <option value="bugfix">Bug Fix</option>
+        <option value="learning">Learning</option>
+        <option value="review">Review</option>
+        <option value="design">Design</option>
+        <option value="documentation">Documentation</option>
+        <option value="refactor">Refactor</option>
+        <option value="infrastructure">Infrastructure</option>
+        <option value="meeting">Meeting</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Impact Level</label>
+      <select id="edit-impact">
+        <option value="low">Low</option>
+        <option value="medium">Medium</option>
+        <option value="high">High</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Date</label>
+      <input type="date" id="edit-date">
+    </div>
+    <div class="field">
+      <label>Context</label>
+      <input type="text" id="edit-context" placeholder="work, side_project, personal…">
+    </div>
+    <div class="field">
+      <label>Tags (comma-separated)</label>
+      <input type="text" id="edit-tags" placeholder="python, api, auth">
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn-save" onclick="saveEdit()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const CAT_COLORS = {
+    feature:        '#3b82f6',
+    bugfix:         '#ef4444',
+    learning:       '#8b5cf6',
+    review:         '#14b8a6',
+    design:         '#ec4899',
+    documentation:  '#6b7280',
+    refactor:       '#f59e0b',
+    infrastructure: '#10b981',
+    meeting:        '#6366f1',
+    other:          '#94a3b8',
+  };
+
+  const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  let currentView = 'timeline';
+  let currentPeriod = 'this_year';
+  let allData = [];
+  let debounceTimer = null;
+
+  // ── Fetch stats ────────────────────────────────────────────────────────
+  async function loadStats() {
+    try {
+      const r = await fetch('/api/stats');
+      const s = await r.json();
+      setText('stat-total',  s.total);
+      setText('stat-today',  s.today);
+      setText('stat-week',   s.this_week);
+      setText('stat-year',   s.this_year);
+      setText('stat-high',   s.high_impact);
+    } catch { /* ignore */ }
+  }
+
+  function setText(id, val) {
+    document.querySelector(`#${id} .value`).textContent = val ?? '—';
+  }
+
+  // ── Fetch accomplishments ───────────────────────────────────────────────
+  async function loadData(params = {}) {
+    document.getElementById('content').innerHTML = '<div class="loading">Loading…</div>';
+    try {
+      const qs = new URLSearchParams(Object.fromEntries(
+        Object.entries(params).filter(([, v]) => v)
+      )).toString();
+      const url = '/api/accomplishments' + (qs ? '?' + qs : '');
+      const r = await fetch(url);
+      allData = await r.json();
+      renderView();
+    } catch (e) {
+      document.getElementById('content').innerHTML =
+        `<div class="empty"><div class="icon">⚠️</div><h3>Failed to load</h3><p>${e.message}</p></div>`;
+    }
+  }
+
+  // ── Render ──────────────────────────────────────────────────────────────
+  function renderView() {
+    document.getElementById('result-info').textContent =
+      allData.length === 0 ? '' : `${allData.length} accomplishment${allData.length !== 1 ? 's' : ''}`;
+
+    if (currentView === 'timeline') renderTimeline();
+    else renderAnnual();
+  }
+
+  function renderTimeline() {
+    if (allData.length === 0) {
+      document.getElementById('content').innerHTML = emptyState();
+      return;
+    }
+
+    // Group by date
+    const groups = {};
+    for (const item of allData) {
+      if (!groups[item.date]) groups[item.date] = [];
+      groups[item.date].push(item);
+    }
+
+    const html = Object.entries(groups)
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([date, items]) => {
+        const d = new Date(date + 'T12:00:00');
+        const label = formatDateLabel(d);
+        return `
+          <div class="day-group">
+            <div class="day-header">
+              <span class="day-label">${label}</span>
+              <span class="day-count">${items.length}</span>
+              <div class="day-line"></div>
+            </div>
+            ${items.map(renderCard).join('')}
+          </div>`;
+      }).join('');
+
+    document.getElementById('content').innerHTML = html;
+  }
+
+  function renderAnnual() {
+    if (allData.length === 0) {
+      document.getElementById('content').innerHTML = emptyState();
+      return;
+    }
+
+    // Group by month
+    const months = {};
+    for (const item of allData) {
+      const month = item.date.slice(0, 7);
+      if (!months[month]) months[month] = [];
+      months[month].push(item);
+    }
+
+    const html = Object.entries(months)
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([month, items]) => {
+        const [year, mo] = month.split('-');
+        const label = `${MONTH_NAMES[parseInt(mo, 10) - 1]} ${year}`;
+        const high = items.filter(i => i.impact_level === 'high').length;
+        const cats = [...new Set(items.map(i => i.category))];
+        const catBadges = cats.map(c =>
+          `<span class="cat-badge" style="background:${CAT_COLORS[c]||'#94a3b8'}">${c}</span>`
+        ).join('');
+
+        return `
+          <div class="month-section">
+            <div class="month-header" onclick="toggleMonth(this)">
+              <span class="month-name">📅 ${label}</span>
+              <div class="month-stats">
+                <span>${items.length} accomplished</span>
+                ${high > 0 ? `<span>🔴 ${high} high-impact</span>` : ''}
+              </div>
+              <span style="color:var(--muted);font-size:0.8rem">▼</span>
+            </div>
+            <div class="month-cards">
+              <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.75rem">${catBadges}</div>
+              ${items.map(renderCard).join('')}
+            </div>
+          </div>`;
+      }).join('');
+
+    document.getElementById('content').innerHTML = `<div class="monthly-grid">${html}</div>`;
+  }
+
+  function contextClass(ctx) {
+    const known = ['work', 'side_project', 'personal'];
+    return 'context-' + (known.includes(ctx) ? ctx : 'other');
+  }
+
+  function renderCard(item) {
+    const catColor = CAT_COLORS[item.category] || '#94a3b8';
+    const tags = (item.tags || []).map(t => `<span class="tag-badge">${esc(t)}</span>`).join('');
+    const time = item.created_at ? item.created_at.slice(11, 16) : '';
+    const ctx = item.context || 'work';
+    const ctxLabel = ctx.replace(/_/g, ' ');
+    return `
+      <div class="card" data-id="${item.id}">
+        <div class="card-actions">
+          <button class="action-btn" onclick="openEdit(${item.id})" title="Edit">✎ Edit</button>
+          <button class="action-btn delete" onclick="deleteItem(${item.id})" title="Delete">✕ Delete</button>
+        </div>
+        <div class="card-header">
+          <span class="impact-dot ${item.impact_level}" title="${item.impact_level} impact"></span>
+          <span class="card-title">${esc(item.title)}</span>
+        </div>
+        <div class="card-description">${esc(item.description)}</div>
+        <div class="card-footer">
+          <span class="context-badge ${contextClass(ctx)}">${esc(ctxLabel)}</span>
+          <span class="cat-badge" style="background:${catColor}">${item.category}</span>
+          ${tags}
+          ${time ? `<span class="card-time">${time}</span>` : ''}
+        </div>
+      </div>`;
+  }
+
+  function emptyState() {
+    return `<div class="empty">
+      <div class="icon">📋</div>
+      <h3>No accomplishments found</h3>
+      <p>Ask Claude to log some accomplishments at the end of your next session!</p>
+    </div>`;
+  }
+
+  // ── Controls ────────────────────────────────────────────────────────────
+  function setView(v) {
+    currentView = v;
+    const isSettings = v === 'settings';
+
+    document.getElementById('view-toggle').style.display   = isSettings ? 'none' : '';
+    document.getElementById('result-info').style.display   = isSettings ? 'none' : '';
+    document.getElementById('content').style.display       = isSettings ? 'none' : '';
+    document.getElementById('settings-panel').style.display = isSettings ? '' : 'none';
+    document.getElementById('btn-settings').classList.toggle('active', isSettings);
+
+    if (!isSettings) {
+      document.getElementById('btn-timeline').classList.toggle('active', v === 'timeline');
+      document.getElementById('btn-annual').classList.toggle('active', v === 'annual');
+      renderView();
+    } else {
+      loadSettings();
+    }
+  }
+
+  async function loadSettings() {
+    try {
+      const r = await fetch('/api/settings');
+      if (!r.ok) throw new Error(`Server returned ${r.status} — try restarting the server`);
+      const s = await r.json();
+      document.getElementById('db-path-display').textContent = s.db_path || 'Unknown';
+    } catch (e) {
+      document.getElementById('db-path-display').textContent = e.message;
+    }
+  }
+
+  function setPeriod(btn) {
+    if (currentView === 'settings') setView('timeline');
+    document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentPeriod = btn.dataset.period;
+    clearDateFilters();
+    loadData(periodToParams(currentPeriod));
+  }
+
+  function periodToParams(period) {
+    const today = new Date();
+    const fmt = d => d.toISOString().slice(0, 10);
+    const t = fmt(today);
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - today.getDay() + (today.getDay() === 0 ? -6 : 1));
+    const map = {
+      today:      { date_from: t, date_to: t },
+      this_week:  { date_from: fmt(monday), date_to: t },
+      this_month: { date_from: `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-01`, date_to: t },
+      this_year:  { date_from: `${today.getFullYear()}-01-01`, date_to: t },
+      last_year:  { date_from: `${today.getFullYear()-1}-01-01`, date_to: `${today.getFullYear()-1}-12-31` },
+      all_time:   {},
+    };
+    return map[period] || {};
+  }
+
+  function applyFilters() {
+    const search   = document.getElementById('filter-search').value.trim();
+    const from     = document.getElementById('filter-from').value;
+    const to       = document.getElementById('filter-to').value;
+    const category = document.getElementById('filter-category').value;
+    const impact   = document.getElementById('filter-impact').value;
+    const context  = document.getElementById('filter-context').value;
+
+    // Clear period selection
+    document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+
+    loadData({ search, date_from: from, date_to: to, category, impact_level: impact, context });
+  }
+
+  function clearFilters() {
+    document.getElementById('filter-search').value = '';
+    document.getElementById('filter-from').value = '';
+    document.getElementById('filter-to').value = '';
+    document.getElementById('filter-category').value = '';
+    document.getElementById('filter-impact').value = '';
+    document.getElementById('filter-context').value = '';
+    // Restore "This Year" default
+    document.querySelectorAll('.period-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.period === 'this_year');
+    });
+    currentPeriod = 'this_year';
+    loadData(periodToParams('this_year'));
+  }
+
+  function clearDateFilters() {
+    document.getElementById('filter-from').value = '';
+    document.getElementById('filter-to').value = '';
+    document.getElementById('filter-search').value = '';
+    document.getElementById('filter-category').value = '';
+    document.getElementById('filter-impact').value = '';
+    document.getElementById('filter-context').value = '';
+  }
+
+  function debounceSearch() {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      const q = document.getElementById('filter-search').value.trim();
+      if (q.length >= 2 || q.length === 0) applyFilters();
+    }, 350);
+  }
+
+  function toggleMonth(header) {
+    const cards = header.nextElementSibling;
+    const arrow = header.querySelector('span:last-child');
+    const hidden = cards.style.display === 'none';
+    cards.style.display = hidden ? '' : 'none';
+    arrow.textContent = hidden ? '▼' : '▶';
+  }
+
+  function refresh() {
+    loadStats();
+    loadData(periodToParams(currentPeriod));
+  }
+
+  // ── Helpers ─────────────────────────────────────────────────────────────
+  function esc(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function formatDateLabel(d) {
+    const today = new Date(); today.setHours(0,0,0,0);
+    const yd = new Date(today); yd.setDate(today.getDate() - 1);
+    d.setHours(0,0,0,0);
+    if (d.getTime() === today.getTime()) return 'Today';
+    if (d.getTime() === yd.getTime()) return 'Yesterday';
+    return d.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' });
+  }
+
+  // ── Edit / Delete ────────────────────────────────────────────────────────
+  let editingId = null;
+
+  function openEdit(id) {
+    const item = allData.find(i => i.id === id);
+    if (!item) return;
+    editingId = id;
+    document.getElementById('edit-title').value       = item.title;
+    document.getElementById('edit-description').value = item.description;
+    document.getElementById('edit-category').value    = item.category;
+    document.getElementById('edit-impact').value      = item.impact_level;
+    document.getElementById('edit-date').value        = item.date;
+    document.getElementById('edit-context').value     = item.context || 'work';
+    document.getElementById('edit-tags').value        = (item.tags || []).join(', ');
+    document.getElementById('edit-modal').classList.add('open');
+  }
+
+  function closeModal(e) {
+    if (e && e.target !== document.getElementById('edit-modal')) return;
+    document.getElementById('edit-modal').classList.remove('open');
+    editingId = null;
+  }
+
+  async function saveEdit() {
+    if (editingId === null) return;
+    const tagsRaw = document.getElementById('edit-tags').value;
+    const tags = tagsRaw.split(',').map(t => t.trim()).filter(Boolean);
+    const body = {
+      title:        document.getElementById('edit-title').value.trim(),
+      description:  document.getElementById('edit-description').value.trim(),
+      category:     document.getElementById('edit-category').value,
+      impact_level: document.getElementById('edit-impact').value,
+      date:         document.getElementById('edit-date').value,
+      context:      document.getElementById('edit-context').value.trim() || 'work',
+      tags,
+    };
+    try {
+      const r = await fetch(`/api/accomplishments/${editingId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) { alert('Save failed'); return; }
+      document.getElementById('edit-modal').classList.remove('open');
+      editingId = null;
+      refresh();
+    } catch (e) { alert('Save failed: ' + e.message); }
+  }
+
+  async function deleteItem(id) {
+    const item = allData.find(i => i.id === id);
+    if (!item) return;
+    if (!confirm(`Delete "${item.title}"?`)) return;
+    try {
+      const r = await fetch(`/api/accomplishments/${id}`, { method: 'DELETE' });
+      if (!r.ok) { alert('Delete failed'); return; }
+      refresh();
+    } catch (e) { alert('Delete failed: ' + e.message); }
+  }
+
+  // ── Import / Export ──────────────────────────────────────────────────────
+  async function importDb(input) {
+    const file = input.files[0];
+    if (!file) return;
+    input.value = '';
+
+    const feedback = document.getElementById('import-feedback');
+    feedback.textContent = 'Importing…';
+    feedback.className = 'import-feedback';
+    feedback.style.display = 'block';
+
+    const form = new FormData();
+    form.append('file', file);
+
+    try {
+      const r = await fetch('/api/import', { method: 'POST', body: form });
+      const data = await r.json();
+      if (!r.ok) {
+        feedback.textContent = '✕ ' + (data.error || 'Import failed');
+        feedback.className = 'import-feedback err';
+      } else {
+        feedback.textContent = `✓ Imported ${data.imported} record${data.imported !== 1 ? 's' : ''} — refresh to see your data`;
+        feedback.className = 'import-feedback ok';
+        loadStats();
+        loadData(periodToParams(currentPeriod));
+      }
+    } catch (e) {
+      feedback.textContent = '✕ ' + e.message;
+      feedback.className = 'import-feedback err';
+    }
+  }
+
+  // ── Init ────────────────────────────────────────────────────────────────
+  loadStats();
+  loadData(periodToParams('this_year'));
+</script>
+</body>
+</html>
