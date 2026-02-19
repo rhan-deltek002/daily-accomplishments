@@ -106,10 +106,16 @@
       background: var(--surface);
       padding: 0.9rem 1.25rem;
       text-align: center;
+      cursor: pointer;
+      transition: background 0.1s;
     }
+    .stat:hover { background: #f8faff; }
+    .stat.active { background: #eef2ff; }
     .stat .value { font-size: 1.6rem; font-weight: 700; color: var(--text); }
     .stat .label { font-size: 0.72rem; color: var(--muted); margin-top: 2px; text-transform: uppercase; letter-spacing: .04em; }
     .stat.highlight .value { color: var(--primary); }
+    .stat.active .value { color: var(--primary); }
+    .stat.active .label { color: var(--primary); }
 
     /* ── Layout ── */
     .layout { display: flex; min-height: calc(100vh - 100px); }
@@ -317,23 +323,23 @@
 </header>
 
 <div class="stats-bar">
-  <div class="stat highlight" id="stat-total">
+  <div class="stat highlight" id="stat-total" onclick="statFilter('all_time')">
     <div class="value">—</div>
     <div class="label">Total</div>
   </div>
-  <div class="stat" id="stat-today">
+  <div class="stat" id="stat-today" onclick="statFilter('today')">
     <div class="value">—</div>
     <div class="label">Today</div>
   </div>
-  <div class="stat" id="stat-week">
+  <div class="stat" id="stat-week" onclick="statFilter('this_week')">
     <div class="value">—</div>
     <div class="label">This Week</div>
   </div>
-  <div class="stat" id="stat-year">
+  <div class="stat" id="stat-year" onclick="statFilter('this_year')">
     <div class="value">—</div>
     <div class="label">This Year</div>
   </div>
-  <div class="stat" id="stat-high">
+  <div class="stat" id="stat-high" onclick="statFilter('high_impact')">
     <div class="value">—</div>
     <div class="label">High Impact</div>
   </div>
@@ -759,8 +765,31 @@
     }
   }
 
+  function statFilter(type) {
+    if (currentView === 'settings') setView('timeline');
+
+    // Clear stat active states, then highlight the clicked one
+    document.querySelectorAll('.stat').forEach(s => s.classList.remove('active'));
+    const statIdMap = { all_time: 'stat-total', today: 'stat-today', this_week: 'stat-week', this_year: 'stat-year', high_impact: 'stat-high' };
+    document.getElementById(statIdMap[type])?.classList.add('active');
+
+    // Clear sidebar period selection and filters
+    document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+    clearDateFilters();
+
+    if (type === 'high_impact') {
+      document.getElementById('filter-impact').value = 'high';
+      currentPeriod = 'all_time';
+      loadData({ impact_level: 'high' });
+    } else {
+      currentPeriod = type;
+      loadData(periodToParams(type));
+    }
+  }
+
   function setPeriod(btn) {
     if (currentView === 'settings') setView('timeline');
+    document.querySelectorAll('.stat').forEach(s => s.classList.remove('active'));
     document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     currentPeriod = btn.dataset.period;
@@ -793,7 +822,7 @@
     const impact   = document.getElementById('filter-impact').value;
     const context  = document.getElementById('filter-context').value;
 
-    // Clear period selection
+    document.querySelectorAll('.stat').forEach(s => s.classList.remove('active'));
     document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
 
     loadData({ search, date_from: from, date_to: to, category, impact_level: impact, context });
@@ -806,7 +835,7 @@
     document.getElementById('filter-category').value = '';
     document.getElementById('filter-impact').value = '';
     document.getElementById('filter-context').value = '';
-    // Restore "This Year" default
+    document.querySelectorAll('.stat').forEach(s => s.classList.remove('active'));
     document.querySelectorAll('.period-btn').forEach(b => {
       b.classList.toggle('active', b.dataset.period === 'this_year');
     });
