@@ -69,13 +69,13 @@ Free-form label to separate work types. Common values: `work` (default), `side_p
 
 ## Moving your database
 
-Use the **↓ Export DB** and **↑ Import DB** buttons in the dashboard header to download and restore your database file. This is the easiest way to:
+Use the **Settings** page in the dashboard:
 
-- Move your data to a different machine
-- Back up your records
-- Switch to a different database location
+1. **Export DB** — downloads the current database file to your browser
+2. Move the file to the desired location
+3. **Change to** — type the new path and click **Use this DB**
 
-On import, the current database is automatically backed up to `accomplishments.db.bak` before being replaced.
+The server switches immediately with no data copied. The selected path is saved to `~/.daily-accomplishments/config.json` and persists across restarts.
 
 ## Dashboard
 

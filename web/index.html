@@ -442,17 +442,11 @@
         </div>
 
         <div class="settings-section">
-          <h3>Export &amp; Import</h3>
+          <h3>Export</h3>
           <div class="settings-row">
             <a class="settings-btn primary" href="/api/export" download="accomplishments.db">↓ Export DB</a>
-            <button class="settings-btn" onclick="document.getElementById('import-input').click()">↑ Import DB</button>
-            <input type="file" id="import-input" accept=".db" style="display:none" onchange="importDb(this)">
           </div>
-          <p class="import-note">
-            <strong>Export</strong> downloads your current database.<br>
-            <strong>Import</strong> replaces the current database with an uploaded file — a backup is saved as <code>.bak</code> automatically.
-          </p>
-          <div class="import-feedback" id="import-feedback"></div>
+          <p class="import-note">Downloads the active database file. Move it anywhere, then use <strong>Change to</strong> above to point the server at the new location.</p>
         </div>
       </div>
     </div>
@@ -917,38 +911,6 @@
       if (!r.ok) { alert('Delete failed'); return; }
       refresh();
     } catch (e) { alert('Delete failed: ' + e.message); }
-  }
-
-  // ── Import / Export ──────────────────────────────────────────────────────
-  async function importDb(input) {
-    const file = input.files[0];
-    if (!file) return;
-    input.value = '';
-
-    const feedback = document.getElementById('import-feedback');
-    feedback.textContent = 'Importing…';
-    feedback.className = 'import-feedback';
-    feedback.style.display = 'block';
-
-    const form = new FormData();
-    form.append('file', file);
-
-    try {
-      const r = await fetch('/api/import', { method: 'POST', body: form });
-      const data = await r.json();
-      if (!r.ok) {
-        feedback.textContent = '✕ ' + (data.error || 'Import failed');
-        feedback.className = 'import-feedback err';
-      } else {
-        feedback.textContent = `✓ Imported ${data.imported} record${data.imported !== 1 ? 's' : ''} — refresh to see your data`;
-        feedback.className = 'import-feedback ok';
-        loadStats();
-        loadData(periodToParams(currentPeriod));
-      }
-    } catch (e) {
-      feedback.textContent = '✕ ' + e.message;
-      feedback.className = 'import-feedback err';
-    }
   }
 
   // ── Init ────────────────────────────────────────────────────────────────

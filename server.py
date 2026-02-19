@@ -8,14 +8,11 @@ Web dashboard runs in a background thread on http://localhost:8765
 import os
 import sys
 import json
-import shutil
-import sqlite3
-import tempfile
 import threading
 from typing import Optional
 
 import uvicorn
-from fastapi import FastAPI, Query, UploadFile, File
+from fastapi import FastAPI, Query
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 
 from mcp.server.fastmcp import FastMCP
@@ -319,33 +316,6 @@ async def api_export():
         media_type="application/octet-stream",
         filename="accomplishments.db",
     )
-
-
-@web_app.post("/api/import")
-async def api_import(file: UploadFile = File(...)):
-    # Write upload to a temp file
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".db") as tmp:
-        shutil.copyfileobj(file.file, tmp)
-        tmp_path = tmp.name
-
-    # Validate: must be a SQLite database with the right table
-    try:
-        conn = sqlite3.connect(tmp_path)
-        count = conn.execute("SELECT COUNT(*) FROM accomplishments").fetchone()[0]
-        conn.close()
-    except Exception as e:
-        os.unlink(tmp_path)
-        return JSONResponse(status_code=400, content={"error": f"Invalid database file: {e}"})
-
-    # Back up current database then replace it
-    if os.path.exists(DB_PATH):
-        shutil.copy2(DB_PATH, DB_PATH + ".bak")
-    shutil.move(tmp_path, DB_PATH)
-
-    # Run migrations in case the imported DB is from an older version
-    database.init_db(DB_PATH)
-
-    return JSONResponse(content={"success": True, "imported": count})
 
 
 # ---------------------------------------------------------------------------
