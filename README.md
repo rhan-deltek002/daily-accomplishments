@@ -43,7 +43,7 @@ install.bat
 | macOS | `~/.daily-accomplishments/accomplishments.db` |
 | Windows | `%USERPROFILE%\.daily-accomplishments\accomplishments.db` |
 
-The directory is created automatically. To use a different location on Linux/macOS, pass it as an argument to `install.sh` (see above) or set the `ACCOMPLISHMENTS_DB` environment variable. On Windows the default path is always used — to move the database, use the **Export / Import** buttons in the web dashboard.
+The directory is created automatically. To use a different location on Linux/macOS, pass it as an argument to `install.sh` (see above) or set the `ACCOMPLISHMENTS_DB` environment variable. On Windows the default path is always used — to move the database, use the **Settings** page in the dashboard.
 
 ## MCP Tools
 
@@ -73,7 +73,7 @@ Use the **Settings** page in the dashboard:
 
 1. **Export DB** — downloads the current database file to your browser
 2. Move the file to the desired location
-3. **Change to** — type the new path and click **Use this DB**
+3. **Change DB** — paste the new path (Windows or Linux format) and click **Save**
 
 The server switches immediately with no data copied. The selected path is saved to `~/.daily-accomplishments/config.json` and persists across restarts.
 
