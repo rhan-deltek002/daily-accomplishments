@@ -210,6 +210,57 @@ def update_accomplishment(
         return _row_to_dict(row) if row else None
 
 
+def merge_accomplishments(db_path: str, source_path: str) -> dict:
+    """Merge records from source_path into db_path.
+
+    Each record from the source is inserted with a new auto-assigned ID.
+    Duplicates are detected by matching title + date + description and skipped.
+    The original created_at timestamp is preserved so the timeline stays accurate.
+    """
+    src_conn = sqlite3.connect(source_path)
+    src_conn.row_factory = sqlite3.Row
+    try:
+        source_records = src_conn.execute(
+            "SELECT * FROM accomplishments ORDER BY date, created_at"
+        ).fetchall()
+    finally:
+        src_conn.close()
+
+    added = 0
+    skipped = 0
+
+    with get_conn(db_path) as conn:
+        for row in source_records:
+            r = _row_to_dict(row)
+            duplicate = conn.execute(
+                "SELECT id FROM accomplishments WHERE title = ? AND date = ? AND description = ?",
+                (r["title"], r["date"], r["description"]),
+            ).fetchone()
+
+            if duplicate:
+                skipped += 1
+            else:
+                conn.execute(
+                    """
+                    INSERT INTO accomplishments
+                        (title, description, category, impact_level, tags, date, context, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        r["title"], r["description"], r["category"],
+                        r.get("impact_level", "medium"),
+                        json.dumps(r.get("tags") or []),
+                        r["date"],
+                        r.get("context", "work"),
+                        r.get("created_at"),
+                    ),
+                )
+                added += 1
+        conn.commit()
+
+    return {"added": added, "skipped": skipped, "total_source": len(source_records)}
+
+
 def delete_accomplishment(db_path: str, id: int) -> bool:
     with get_conn(db_path) as conn:
         cursor = conn.execute("DELETE FROM accomplishments WHERE id = ?", (id,))

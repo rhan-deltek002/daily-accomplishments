@@ -10,11 +10,13 @@ import re
 import sys
 import json
 import sqlite3
+import shutil
+import tempfile
 import threading
 from typing import Optional
 
 import uvicorn
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 
 from mcp.server.fastmcp import FastMCP
@@ -379,6 +381,34 @@ async def api_export():
         media_type="application/octet-stream",
         filename="accomplishments.db",
     )
+
+
+@web_app.post("/api/merge")
+async def api_merge(file: UploadFile = File(...)):
+    # Write upload to a temp file
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".db") as tmp:
+        shutil.copyfileobj(file.file, tmp)
+        tmp_path = tmp.name
+
+    # Validate it's a proper SQLite database with the right table
+    try:
+        conn = sqlite3.connect(tmp_path)
+        conn.execute("SELECT COUNT(*) FROM accomplishments").fetchone()
+        conn.close()
+    except Exception as e:
+        os.unlink(tmp_path)
+        return JSONResponse(status_code=400, content={"error": f"Invalid database file: {e}"})
+
+    # Run migrations on the source so columns match before merging
+    try:
+        database.init_db(tmp_path)
+        result = database.merge_accomplishments(DB_PATH, tmp_path)
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": f"Merge failed: {e}"})
+    finally:
+        os.unlink(tmp_path)
+
+    return JSONResponse(content={"success": True, **result})
 
 
 # ---------------------------------------------------------------------------

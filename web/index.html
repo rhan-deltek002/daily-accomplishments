@@ -540,6 +540,20 @@
           </div>
           <div class="import-feedback" id="db-path-feedback"></div>
         </div>
+
+        <div class="settings-section">
+          <h3>Merge Database</h3>
+          <p class="import-note" style="margin-bottom:1rem">
+            Combine records from another database into this one — useful when you've been
+            logging on multiple machines. Duplicates (same title, date, and description)
+            are skipped automatically.
+          </p>
+          <div class="settings-row">
+            <button class="settings-btn primary" onclick="document.getElementById('merge-input').click()">⇢ Select DB to Merge</button>
+            <input type="file" id="merge-input" accept=".db" style="display:none" onchange="mergeDb(this)">
+          </div>
+          <div class="import-feedback" id="merge-feedback"></div>
+        </div>
       </div>
     </div>
   </main>
@@ -811,6 +825,38 @@
       document.getElementById('db-path-input').placeholder = s.db_path || '/path/to/accomplishments.db';
     } catch (e) {
       document.getElementById('db-path-display').textContent = e.message;
+    }
+  }
+
+  async function mergeDb(input) {
+    const file = input.files[0];
+    if (!file) return;
+    input.value = '';
+
+    const feedback = document.getElementById('merge-feedback');
+    feedback.textContent = 'Merging…';
+    feedback.className = 'import-feedback';
+    feedback.style.display = 'block';
+
+    const form = new FormData();
+    form.append('file', file);
+
+    try {
+      const r = await fetch('/api/merge', { method: 'POST', body: form });
+      const data = await r.json();
+      if (!r.ok) {
+        feedback.textContent = '✕ ' + (data.error || 'Merge failed');
+        feedback.className = 'import-feedback err';
+      } else {
+        const { added, skipped, total_source } = data;
+        feedback.textContent = `✓ Merged ${added} new record${added !== 1 ? 's' : ''} from ${total_source} — ${skipped} duplicate${skipped !== 1 ? 's' : ''} skipped`;
+        feedback.className = 'import-feedback ok';
+        loadStats();
+        loadData(periodToParams(currentPeriod));
+      }
+    } catch (e) {
+      feedback.textContent = '✕ ' + e.message;
+      feedback.className = 'import-feedback err';
     }
   }
 
