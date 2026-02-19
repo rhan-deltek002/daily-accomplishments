@@ -53,18 +53,36 @@ DB_PATH: str = _config.get("db_path") or os.environ.get("ACCOMPLISHMENTS_DB") or
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 database.init_db(DB_PATH)
 
+def _is_wsl() -> bool:
+    try:
+        with open('/proc/version') as f:
+            return 'microsoft' in f.read().lower()
+    except OSError:
+        return False
+
+_RUNNING_IN_WSL = _is_wsl()
+
+
 def _normalize_path(path: str) -> str:
-    """Convert Windows-style paths to WSL paths when running under WSL.
-    e.g. C:\\Users\\rhan\\foo  →  /mnt/c/Users/rhan/foo
-         D:/data/db.db         →  /mnt/d/data/db.db
-    Non-Windows paths are returned unchanged.
+    """Normalise a user-supplied path for the current platform.
+
+    On WSL: convert Windows-style paths to their /mnt/<drive>/... equivalent
+      C:\\Users\\rhan\\foo  →  /mnt/c/Users/rhan/foo
+      C:/Users/rhan/foo    →  /mnt/c/Users/rhan/foo
+
+    On native Windows or Linux: return the path unchanged (just flip
+    backslashes to forward slashes on Windows so os.path functions work).
     """
     m = re.match(r'^([A-Za-z]):[\\\/](.*)', path)
     if m:
-        drive = m.group(1).lower()
-        rest = m.group(2).replace('\\', '/')
-        return f'/mnt/{drive}/{rest}'
-    return path.replace('\\', '/')
+        if _RUNNING_IN_WSL:
+            drive = m.group(1).lower()
+            rest = m.group(2).replace('\\', '/')
+            return f'/mnt/{drive}/{rest}'
+        else:
+            # Native Windows — keep the drive letter, just normalise slashes
+            return path.replace('/', '\\')
+    return path
 
 
 # ---------------------------------------------------------------------------
