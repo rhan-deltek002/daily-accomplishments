@@ -23,19 +23,36 @@ from mcp.server.fastmcp import FastMCP
 import db as database
 
 # ---------------------------------------------------------------------------
-# Paths
+# Paths & config
 # ---------------------------------------------------------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DASHBOARD_HTML = os.path.join(BASE_DIR, "web", "index.html")
 WEB_PORT = 8765
 
-_default_db = os.path.join(os.path.expanduser("~"), ".daily-accomplishments", "accomplishments.db")
-DB_PATH = os.environ.get("ACCOMPLISHMENTS_DB", _default_db)
+_DATA_DIR = os.path.join(os.path.expanduser("~"), ".daily-accomplishments")
+_CONFIG_PATH = os.path.join(_DATA_DIR, "config.json")
+_DEFAULT_DB = os.path.join(_DATA_DIR, "accomplishments.db")
 
-# Ensure the database directory exists
+
+def _load_config() -> dict:
+    if os.path.exists(_CONFIG_PATH):
+        with open(_CONFIG_PATH) as f:
+            return json.load(f)
+    return {}
+
+
+def _save_config(data: dict) -> None:
+    os.makedirs(_DATA_DIR, exist_ok=True)
+    with open(_CONFIG_PATH, "w") as f:
+        json.dump(data, f, indent=2)
+
+
+# Priority: config file > ACCOMPLISHMENTS_DB env var > default
+_config = _load_config()
+DB_PATH: str = _config.get("db_path") or os.environ.get("ACCOMPLISHMENTS_DB") or _DEFAULT_DB
+
+# Ensure the database directory exists and initialise
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-
-# Initialise the database on startup
 database.init_db(DB_PATH)
 
 # ---------------------------------------------------------------------------
@@ -246,6 +263,26 @@ async def api_stats():
 @web_app.get("/api/settings")
 async def api_settings():
     return JSONResponse(content={"db_path": DB_PATH})
+
+
+@web_app.post("/api/settings")
+async def api_save_settings(body: dict):
+    global DB_PATH
+    new_path = os.path.expanduser(body.get("db_path", "").strip())
+    if not new_path:
+        return JSONResponse(status_code=400, content={"error": "db_path is required"})
+
+    try:
+        dir_part = os.path.dirname(new_path)
+        if dir_part:
+            os.makedirs(dir_part, exist_ok=True)
+        database.init_db(new_path)
+    except Exception as e:
+        return JSONResponse(status_code=400, content={"error": f"Cannot use that path: {e}"})
+
+    DB_PATH = new_path
+    _save_config({"db_path": new_path})
+    return JSONResponse(content={"success": True, "db_path": DB_PATH})
 
 
 @web_app.put("/api/accomplishments/{id}")

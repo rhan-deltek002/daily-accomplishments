@@ -425,10 +425,20 @@
       <div class="settings-view">
         <div class="settings-section">
           <h3>Database</h3>
-          <div class="settings-row">
-            <label>Location</label>
+          <div class="settings-row" style="margin-bottom:1rem">
+            <label>Active</label>
             <span class="db-path" id="db-path-display">Loading…</span>
           </div>
+          <div class="settings-row">
+            <label>Change to</label>
+            <input type="text" id="db-path-input" class="db-path" placeholder="/path/to/accomplishments.db" style="flex:1;cursor:text">
+            <button class="settings-btn primary" onclick="saveDbPath()">Use this DB</button>
+          </div>
+          <p class="import-note" style="margin-top:0.5rem">
+            The server switches immediately — no data is copied. Use <strong>Export DB</strong> first
+            if you want to move your data to the new location.
+          </p>
+          <div class="import-feedback" id="db-path-feedback"></div>
         </div>
 
         <div class="settings-section">
@@ -438,7 +448,10 @@
             <button class="settings-btn" onclick="document.getElementById('import-input').click()">↑ Import DB</button>
             <input type="file" id="import-input" accept=".db" style="display:none" onchange="importDb(this)">
           </div>
-          <p class="import-note">Importing replaces the current database. A backup is saved automatically as <code>accomplishments.db.bak</code>.</p>
+          <p class="import-note">
+            <strong>Export</strong> downloads your current database.<br>
+            <strong>Import</strong> replaces the current database with an uploaded file — a backup is saved as <code>.bak</code> automatically.
+          </p>
           <div class="import-feedback" id="import-feedback"></div>
         </div>
       </div>
@@ -706,8 +719,44 @@
       if (!r.ok) throw new Error(`Server returned ${r.status} — try restarting the server`);
       const s = await r.json();
       document.getElementById('db-path-display').textContent = s.db_path || 'Unknown';
+      document.getElementById('db-path-input').placeholder = s.db_path || '/path/to/accomplishments.db';
     } catch (e) {
       document.getElementById('db-path-display').textContent = e.message;
+    }
+  }
+
+  async function saveDbPath() {
+    const input = document.getElementById('db-path-input').value.trim();
+    const feedback = document.getElementById('db-path-feedback');
+    if (!input) return;
+
+    feedback.textContent = 'Switching…';
+    feedback.className = 'import-feedback';
+    feedback.style.display = 'block';
+
+    try {
+      const r = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ db_path: input }),
+      });
+      const data = await r.json();
+      if (!r.ok) {
+        feedback.textContent = '✕ ' + (data.error || 'Failed to switch database');
+        feedback.className = 'import-feedback err';
+      } else {
+        document.getElementById('db-path-display').textContent = data.db_path;
+        document.getElementById('db-path-input').value = '';
+        document.getElementById('db-path-input').placeholder = data.db_path;
+        feedback.textContent = '✓ Now using ' + data.db_path;
+        feedback.className = 'import-feedback ok';
+        loadStats();
+        loadData(periodToParams(currentPeriod));
+        setTimeout(() => { feedback.style.display = 'none'; }, 5000);
+      }
+    } catch (e) {
+      feedback.textContent = '✕ ' + e.message;
+      feedback.className = 'import-feedback err';
     }
   }
 
