@@ -29,30 +29,11 @@ Think of it as a *work journal that writes itself.*
 
 ## Installation
 
-### Linux / macOS / WSL
+> **Recommended:** Use the manual install below so you can choose the MCP scope. The install scripts default to project scope, which means the MCP is only active when Claude Code is opened inside this specific directory — most users want it available everywhere.
 
-```bash
-cd daily-accomplishments
-./install.sh
-```
+### Recommended: manual install (choose your scope)
 
-Custom database location:
-```bash
-./install.sh /path/to/my-accomplishments.db
-```
-
-### Windows
-
-```bat
-cd daily-accomplishments
-install.bat
-```
-
-### MCP scope — project vs user
-
-The install scripts register the MCP at **project scope** by default — it's only active when Claude Code is opened inside that specific project directory.
-
-To make it available **across all your projects**, register it manually with `--scope user`:
+Register with `--scope user` to make it available **across all your projects**:
 
 ```bash
 # Linux / macOS / WSL
@@ -68,10 +49,35 @@ claude mcp add daily-accomplishments --scope user ^
   -- python C:\path\to\daily-accomplishments\server.py
 ```
 
+Use `--scope project` instead if you intentionally want it limited to a single project directory.
+
+### Quick install scripts (project scope only)
+
+These scripts register the MCP at **project scope** — only active when Claude Code is opened inside this directory.
+
+#### Linux / macOS / WSL
+
+```bash
+cd daily-accomplishments
+./install.sh
+```
+
+Custom database location:
+```bash
+./install.sh /path/to/my-accomplishments.db
+```
+
+#### Windows
+
+```bat
+cd daily-accomplishments
+install.bat
+```
+
 To switch an existing installation from project to user scope:
 ```bash
 claude mcp remove daily-accomplishments
-# then re-run the command above with --scope user
+# then re-run the manual install command above with --scope user
 ```
 
 ## Database location
