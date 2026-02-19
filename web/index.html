@@ -425,28 +425,25 @@
       <div class="settings-view">
         <div class="settings-section">
           <h3>Database</h3>
-          <div class="settings-row" style="margin-bottom:1rem">
+          <div class="settings-row" style="margin-bottom:1.1rem">
             <label>Active</label>
             <span class="db-path" id="db-path-display">Loading…</span>
           </div>
           <div class="settings-row">
-            <label>Change to</label>
-            <input type="text" id="db-path-input" class="db-path" placeholder="/path/to/accomplishments.db" style="flex:1;cursor:text">
-            <button class="settings-btn primary" onclick="saveDbPath()">Use this DB</button>
-          </div>
-          <p class="import-note" style="margin-top:0.5rem">
-            The server switches immediately — no data is copied. Use <strong>Export DB</strong> first
-            if you want to move your data to the new location.
-          </p>
-          <div class="import-feedback" id="db-path-feedback"></div>
-        </div>
-
-        <div class="settings-section">
-          <h3>Export</h3>
-          <div class="settings-row">
+            <button class="settings-btn" onclick="toggleChangeDb()">⇄ Change DB</button>
             <a class="settings-btn primary" href="/api/export" download="accomplishments.db">↓ Export DB</a>
           </div>
-          <p class="import-note">Downloads the active database file. Move it anywhere, then use <strong>Change to</strong> above to point the server at the new location.</p>
+          <div id="change-db-form" style="display:none;margin-top:1rem">
+            <div class="settings-row">
+              <label>Path</label>
+              <input type="text" id="db-path-input" class="db-path" placeholder="/path/to/accomplishments.db" style="flex:1;cursor:text">
+            </div>
+            <div class="settings-row" style="margin-top:0.6rem;justify-content:flex-end">
+              <button class="settings-btn" onclick="toggleChangeDb()">Cancel</button>
+              <button class="settings-btn primary" onclick="saveDbPath()">Save</button>
+            </div>
+          </div>
+          <div class="import-feedback" id="db-path-feedback"></div>
         </div>
       </div>
     </div>
@@ -719,6 +716,13 @@
     }
   }
 
+  function toggleChangeDb() {
+    const form = document.getElementById('change-db-form');
+    const visible = form.style.display !== 'none';
+    form.style.display = visible ? 'none' : '';
+    if (!visible) document.getElementById('db-path-input').focus();
+  }
+
   async function saveDbPath() {
     const input = document.getElementById('db-path-input').value.trim();
     const feedback = document.getElementById('db-path-feedback');
@@ -741,7 +745,7 @@
       } else {
         document.getElementById('db-path-display').textContent = data.db_path;
         document.getElementById('db-path-input').value = '';
-        document.getElementById('db-path-input').placeholder = data.db_path;
+        document.getElementById('change-db-form').style.display = 'none';
         feedback.textContent = '✓ Now using ' + data.db_path;
         feedback.className = 'import-feedback ok';
         loadStats();
