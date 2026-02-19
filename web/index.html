@@ -747,7 +747,7 @@
         document.getElementById('db-path-display').textContent = data.db_path;
         document.getElementById('db-path-input').value = '';
         document.getElementById('change-db-form').style.display = 'none';
-        feedback.textContent = '✓ Now using ' + data.db_path;
+        feedback.textContent = `✓ Now using ${data.db_path} — ${data.count} record${data.count !== 1 ? 's' : ''} loaded`;
         feedback.className = 'import-feedback ok';
         loadStats();
         loadData(periodToParams(currentPeriod));

@@ -9,6 +9,7 @@ import os
 import re
 import sys
 import json
+import sqlite3
 import threading
 from typing import Optional
 
@@ -302,17 +303,30 @@ async def api_save_settings(body: dict):
     if not new_path:
         return JSONResponse(status_code=400, content={"error": "db_path is required"})
 
+    # Require the file to already exist — silently creating an empty database
+    # at a mistyped path is confusing and causes data loss.
+    if not os.path.exists(new_path):
+        return JSONResponse(status_code=400, content={
+            "error": f"No file found at: {new_path}\n\nExport your current database, move it to that location, then try again."
+        })
+
+    # Validate it's a proper SQLite database with the right table
     try:
-        dir_part = os.path.dirname(new_path)
-        if dir_part:
-            os.makedirs(dir_part, exist_ok=True)
+        conn = sqlite3.connect(new_path)
+        count = conn.execute("SELECT COUNT(*) FROM accomplishments").fetchone()[0]
+        conn.close()
+    except Exception as e:
+        return JSONResponse(status_code=400, content={"error": f"Not a valid accomplishments database: {e}"})
+
+    # Run migrations (adds any missing columns) then switch
+    try:
         database.init_db(new_path)
     except Exception as e:
-        return JSONResponse(status_code=400, content={"error": f"Cannot use that path: {e}"})
+        return JSONResponse(status_code=400, content={"error": f"Could not open database: {e}"})
 
     DB_PATH = new_path
     _save_config({"db_path": new_path})
-    return JSONResponse(content={"success": True, "db_path": DB_PATH})
+    return JSONResponse(content={"success": True, "db_path": DB_PATH, "count": count})
 
 
 @web_app.put("/api/accomplishments/{id}")
