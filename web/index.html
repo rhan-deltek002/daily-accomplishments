@@ -130,11 +130,12 @@
     .tag-cloud-wrap h3 { font-size: 0.78rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin-bottom: 1.25rem; }
     .tag-cloud { display: flex; flex-wrap: wrap; gap: 0.6rem 0.9rem; align-items: center; line-height: 1.2; }
     .cloud-tag {
-      cursor: pointer; font-weight: 600; color: var(--primary);
-      transition: opacity 0.15s;
-      padding: 2px 4px; border-radius: 4px;
+      cursor: pointer; font-weight: 600;
+      transition: transform 0.15s, opacity 0.15s;
+      padding: 0.2em 0.55em; border-radius: 6px;
+      display: inline-block;
     }
-    .cloud-tag:hover { opacity: 0.7; }
+    .cloud-tag:hover { transform: scale(1.08); opacity: 0.85; }
 
     /* Bar chart */
     .tag-chart-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.5rem 1.75rem; }
@@ -142,9 +143,9 @@
     .tag-chart { display: flex; flex-direction: column; gap: 0.55rem; }
     .bar-row { display: flex; align-items: center; gap: 0.75rem; }
     .bar-label { font-size: 0.82rem; color: var(--text); min-width: 120px; text-align: right; flex-shrink: 0; }
-    .bar-track { flex: 1; height: 20px; background: var(--bg); border-radius: 4px; overflow: hidden; }
-    .bar-fill { height: 100%; background: var(--primary); border-radius: 4px; transition: width 0.4s ease; }
-    .bar-count { font-size: 0.78rem; color: var(--muted); min-width: 24px; }
+    .bar-track { flex: 1; height: 22px; background: var(--bg); border-radius: 6px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 6px; transition: width 0.5s cubic-bezier(.4,0,.2,1); }
+    .bar-count { font-size: 0.78rem; color: var(--muted); min-width: 28px; font-weight: 600; }
 
     /* ── Theme toggle ── */
     .theme-toggle { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
@@ -1049,6 +1050,27 @@
   }
 
   // ── Tag Visualizer ───────────────────────────────────────────────────────
+  const TAG_PALETTE = [
+    { bg: '#eff6ff', text: '#1d4ed8' },  // blue
+    { bg: '#f5f3ff', text: '#6d28d9' },  // violet
+    { bg: '#fdf4ff', text: '#a21caf' },  // fuchsia
+    { bg: '#fef2f2', text: '#b91c1c' },  // red
+    { bg: '#fff7ed', text: '#c2410c' },  // orange
+    { bg: '#fefce8', text: '#a16207' },  // yellow
+    { bg: '#f0fdf4', text: '#15803d' },  // green
+    { bg: '#ecfdf5', text: '#047857' },  // emerald
+    { bg: '#f0fdfa', text: '#0f766e' },  // teal
+    { bg: '#ecfeff', text: '#0e7490' },  // cyan
+    { bg: '#eef2ff', text: '#4338ca' },  // indigo
+    { bg: '#fdf2f8', text: '#be185d' },  // pink
+  ];
+
+  function tagColor(tag) {
+    let hash = 0;
+    for (let i = 0; i < tag.length; i++) hash = (hash * 31 + tag.charCodeAt(i)) & 0xffffffff;
+    return TAG_PALETTE[Math.abs(hash) % TAG_PALETTE.length];
+  }
+
   async function renderTags() {
     document.getElementById('tag-cloud').innerHTML = '<span style="color:var(--muted);font-size:0.85rem">Loading…</span>';
     document.getElementById('tag-chart').innerHTML = '';
@@ -1082,27 +1104,30 @@
     const max = sorted[0][1];
     const min = sorted[sorted.length - 1][1];
 
-    // Cloud — font size between 0.85rem and 2.4rem
+    // Cloud — font size between 0.85rem and 2.4rem, each tag colored
     const cloudHtml = sorted.map(([tag, count]) => {
       const ratio = max === min ? 1 : (count - min) / (max - min);
       const size = (0.85 + ratio * 1.55).toFixed(2);
-      const opacity = (0.5 + ratio * 0.5).toFixed(2);
-      return `<span class="cloud-tag" style="font-size:${size}rem;opacity:${opacity}"
-        onclick="filterByTag('${esc(tag)}')" title="${count} use${count !== 1 ? 's' : ''}">${esc(tag)}</span>`;
+      const { bg, text } = tagColor(tag);
+      return `<span class="cloud-tag"
+        style="font-size:${size}rem;background:${bg};color:${text}"
+        onclick="filterByTag('${esc(tag)}')"
+        title="${count} use${count !== 1 ? 's' : ''}">${esc(tag)}</span>`;
     }).join('');
     document.getElementById('tag-cloud').innerHTML = cloudHtml;
 
-    // Bar chart — top 20
+    // Bar chart — top 20, bars coloured per tag
     const top = sorted.slice(0, 20);
     const barHtml = top.map(([tag, count]) => {
       const pct = ((count / max) * 100).toFixed(1);
+      const { text } = tagColor(tag);
       return `
         <div class="bar-row">
           <span class="bar-label">${esc(tag)}</span>
           <div class="bar-track">
-            <div class="bar-fill" style="width:${pct}%"></div>
+            <div class="bar-fill" style="width:${pct}%;background:${text}"></div>
           </div>
-          <span class="bar-count">${count}</span>
+          <span class="bar-count" style="color:${text}">${count}</span>
         </div>`;
     }).join('');
     document.getElementById('tag-chart').innerHTML = barHtml;
