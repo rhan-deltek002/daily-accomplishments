@@ -6,6 +6,7 @@ MCP runs over stdio (how Claude connects).
 Web dashboard runs in a background thread on http://localhost:8765
 """
 import os
+import re
 import sys
 import json
 import threading
@@ -51,6 +52,20 @@ DB_PATH: str = _config.get("db_path") or os.environ.get("ACCOMPLISHMENTS_DB") or
 # Ensure the database directory exists and initialise
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 database.init_db(DB_PATH)
+
+def _normalize_path(path: str) -> str:
+    """Convert Windows-style paths to WSL paths when running under WSL.
+    e.g. C:\\Users\\rhan\\foo  →  /mnt/c/Users/rhan/foo
+         D:/data/db.db         →  /mnt/d/data/db.db
+    Non-Windows paths are returned unchanged.
+    """
+    m = re.match(r'^([A-Za-z]):[\\\/](.*)', path)
+    if m:
+        drive = m.group(1).lower()
+        rest = m.group(2).replace('\\', '/')
+        return f'/mnt/{drive}/{rest}'
+    return path.replace('\\', '/')
+
 
 # ---------------------------------------------------------------------------
 # MCP Server
@@ -265,7 +280,7 @@ async def api_settings():
 @web_app.post("/api/settings")
 async def api_save_settings(body: dict):
     global DB_PATH
-    new_path = os.path.expanduser(body.get("db_path", "").strip())
+    new_path = _normalize_path(os.path.expanduser(body.get("db_path", "").strip()))
     if not new_path:
         return JSONResponse(status_code=400, content={"error": "db_path is required"})
 
