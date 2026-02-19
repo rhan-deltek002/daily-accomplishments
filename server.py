@@ -299,7 +299,8 @@ async def api_settings():
 @web_app.post("/api/settings")
 async def api_save_settings(body: dict):
     global DB_PATH
-    new_path = _normalize_path(os.path.expanduser(body.get("db_path", "").strip()))
+    raw = body.get("db_path", "").strip().strip('"\'')
+    new_path = _normalize_path(os.path.expanduser(raw))
     if not new_path:
         return JSONResponse(status_code=400, content={"error": "db_path is required"})
 
