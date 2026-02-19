@@ -115,7 +115,12 @@ mcp = FastMCP(
         "If the user explicitly specifies a context, always use that. "
         "Never ask the user to clarify context. "
 
-        "Use get_summary for annual performance review preparation."
+        "Use get_summary for annual performance review preparation. "
+
+        "To merge databases: call get_merge_candidates with the file paths, review the "
+        "results carefully — use your judgment to identify near-duplicates that differ only "
+        "in wording, ask the user when unsure — then call execute_merge with the final "
+        "curated list of records. Never skip the review step."
     ),
 )
 
@@ -263,6 +268,58 @@ def delete_accomplishment(id: int) -> dict:
     if not deleted:
         return {"error": f"No accomplishment found with id={id}"}
     return {"success": True, "deleted_id": id}
+
+
+@mcp.tool()
+def get_merge_candidates(source_paths: list[str]) -> dict:
+    """
+    Read records from multiple database files and surface potential duplicates.
+
+    Use this first when the user wants to merge databases. Returns all records
+    labelled by source, with exact duplicates pre-flagged. Review the
+    unique_records list for near-duplicates (same accomplishment described
+    differently on different machines) before calling execute_merge.
+
+    Args:
+        source_paths: List of paths to .db files to merge.
+                      Windows paths (C:\\...) are converted automatically on WSL.
+    """
+    normalized = []
+    for p in source_paths:
+        resolved = _normalize_path(os.path.expanduser(p.strip().strip('"\'') ))
+        if not os.path.exists(resolved):
+            return {"error": f"File not found: {resolved}"}
+        normalized.append(resolved)
+
+    return database.get_merge_candidates(normalized)
+
+
+@mcp.tool()
+def execute_merge(records: list[dict], output_path: Optional[str] = None) -> dict:
+    """
+    Create a new merged database from the provided list of records.
+
+    Call this after reviewing get_merge_candidates and deciding which records
+    to keep. Pass only the records you want in the final database — duplicates
+    you chose to drop should simply be omitted from the list.
+
+    Args:
+        records: List of record dicts to write. Each needs: title, description,
+                 category, impact_level, tags, date, context. The _source field
+                 is ignored if present.
+        output_path: Where to save the merged database. Defaults to
+                     ~/.daily-accomplishments/merged_<timestamp>.db
+                     Windows paths are converted automatically on WSL.
+    """
+    from datetime import datetime as _dt
+    if output_path is None:
+        ts = _dt.now().strftime("%Y%m%d_%H%M%S")
+        out = os.path.join(_DATA_DIR, f"merged_{ts}.db")
+    else:
+        out = _normalize_path(os.path.expanduser(output_path.strip().strip('"\'') ))
+
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    return database.execute_merge(records, out)
 
 
 # ---------------------------------------------------------------------------

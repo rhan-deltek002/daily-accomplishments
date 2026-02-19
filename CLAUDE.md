@@ -48,9 +48,14 @@ Both scripts run `pip install` then call `claude mcp add daily-accomplishments -
 
 ## MCP tools
 
-`log_accomplishment`, `get_accomplishments`, `search_accomplishments`, `get_summary`, `update_accomplishment`, `delete_accomplishment`
+`log_accomplishment`, `get_accomplishments`, `search_accomplishments`, `get_summary`, `update_accomplishment`, `delete_accomplishment`, `get_merge_candidates`, `execute_merge`
 
 Valid values: categories — `feature bugfix learning review design documentation refactor infrastructure meeting other`; impact — `low medium high`; context — free-form string, common values `work side_project personal`.
+
+**AI-assisted merge workflow** (`get_merge_candidates` → `execute_merge`):
+1. `get_merge_candidates(source_paths)` — reads all records from the given files, labels them by source, pre-flags exact duplicates (same title+date+description). Near-duplicates are returned unlabelled for Claude to judge.
+2. Claude reviews, identifies near-duplicates using natural language judgment, asks the user about edge cases.
+3. `execute_merge(records, output_path)` — writes the curated record list to a new DB. Both source files are untouched. Never skip the review step between the two calls.
 
 ## Database
 

@@ -261,6 +261,87 @@ def merge_accomplishments(db_path: str, source_path: str) -> dict:
     return {"added": added, "skipped": skipped, "total_source": len(source_records)}
 
 
+def get_merge_candidates(db_paths: list) -> dict:
+    """Read records from multiple databases and surface potential duplicates.
+
+    Returns all records labelled by source, with exact duplicates (same
+    title + date + description) pre-flagged. Near-duplicates and judgment
+    calls are left for the caller (Claude) to resolve.
+    """
+    all_records = []
+    source_info = {}
+
+    for path in db_paths:
+        try:
+            init_db(path)  # run migrations so columns match
+            records = get_accomplishments(path)
+            source_info[path] = {"count": len(records)}
+            for r in records:
+                r["_source"] = path
+                all_records.append(r)
+        except Exception as e:
+            source_info[path] = {"error": str(e)}
+
+    # Flag exact duplicates — same title (case-insensitive) + date + description
+    seen: dict = {}
+    unique_records = []
+    exact_duplicate_groups = []
+
+    for r in all_records:
+        key = (r["title"].strip().lower(), r["date"], r["description"].strip().lower())
+        if key in seen:
+            # Add to the group for that key
+            found = next((g for g in exact_duplicate_groups if g["key"] == key), None)
+            if found:
+                found["records"].append(r)
+            else:
+                exact_duplicate_groups.append({"key": key, "records": [seen[key], r]})
+        else:
+            seen[key] = r
+            unique_records.append(r)
+
+    return {
+        "sources": source_info,
+        "total_records": len(all_records),
+        "exact_duplicate_groups": exact_duplicate_groups,
+        "unique_records": unique_records,
+        "note": (
+            "exact_duplicate_groups contains records that are identical across sources. "
+            "unique_records contains everything else — review for near-duplicates "
+            "(e.g. same accomplishment described differently on different machines) "
+            "before calling execute_merge."
+        ),
+    }
+
+
+def execute_merge(records: list, output_path: str) -> dict:
+    """Write a curated list of records into a new database at output_path.
+
+    Call this after reviewing get_merge_candidates and deciding which
+    records to keep. The _source field is stripped automatically.
+    """
+    init_db(output_path)
+    with get_conn(output_path) as conn:
+        for r in records:
+            conn.execute(
+                """
+                INSERT INTO accomplishments
+                    (title, description, category, impact_level, tags, date, context, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    r["title"], r["description"], r["category"],
+                    r.get("impact_level", "medium"),
+                    json.dumps(r.get("tags") or []),
+                    r["date"],
+                    r.get("context", "work"),
+                    r.get("created_at"),
+                ),
+            )
+        conn.commit()
+    return {"success": True, "path": output_path, "count": len(records)}
+
+
 def delete_accomplishment(db_path: str, id: int) -> bool:
     with get_conn(db_path) as conn:
         cursor = conn.execute("DELETE FROM accomplishments WHERE id = ?", (id,))
