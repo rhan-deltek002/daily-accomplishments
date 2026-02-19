@@ -72,7 +72,7 @@ _FRUITS = [
 
 def _creative_name() -> str:
     """Return a name in the format ADJECTIVE_FRUIT_YYYYMMDD_HHMMSS."""
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    ts = int(datetime.now().timestamp())
     return f"{random.choice(_ADJECTIVES)}_{random.choice(_FRUITS)}_{ts}"
 
 
