@@ -93,9 +93,17 @@ mcp = FastMCP(
     "daily-accomplishments",
     instructions=(
         "Use these tools to record and review the user's daily accomplishments. "
-        "At the end of a session, call log_accomplishment once per significant task completed. "
-        "Always use context='work' unless the user explicitly specifies a different context "
-        "(e.g. 'side_project', 'personal'). Never ask the user to clarify context — default to 'work'. "
+
+        "BEFORE logging at the end of a session: call get_accomplishments with today's date "
+        "to see what is already recorded. If related accomplishments exist, update them with "
+        "update_accomplishment rather than creating duplicates. Consolidate related work into "
+        "a single entry — do not log one entry per file changed, bug fixed, or tool added. "
+        "Aim for one entry per distinct, meaningful outcome. "
+
+        "Always use context='work' unless the user explicitly says otherwise "
+        "(e.g. 'side_project', 'personal'). Never infer context from the conversation — "
+        "default to 'work'. Never ask the user to clarify context. "
+
         "Use get_summary for annual performance review preparation."
     ),
 )

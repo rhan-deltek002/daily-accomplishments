@@ -39,7 +39,11 @@ Both scripts run `pip install` then call `claude mcp add daily-accomplishments -
 - **`DB_PATH` is a runtime global** in `server.py`. Both the MCP tools and the web API read it; changing it via `POST /api/settings` affects both immediately.
 - **`_normalize_path()`** converts Windows paths (`C:\...`) to WSL paths (`/mnt/c/...`) when `_RUNNING_IN_WSL` is true, and strips surrounding quotes before processing. Always call this before using a user-supplied path.
 - **`POST /api/settings` requires the file to already exist** — it will not create a new empty database at a mistyped path.
-- **MCP server instructions** tell Claude to default `context='work'` without asking. Don't change this default.
+- **MCP server instructions** govern how Claude behaves when logging — see the `instructions=` string in `FastMCP(...)`. These are sent to every Claude instance that connects, so all users get consistent behaviour automatically. The rules encoded there:
+  - Check today's existing records with `get_accomplishments` *before* logging anything
+  - Consolidate related work into one entry; don't log per-file or per-bug granularity
+  - Default `context='work'` — never infer context from the conversation, never ask
+  - When in doubt, `update_accomplishment` an existing entry rather than creating a new one
 
 ## MCP tools
 
