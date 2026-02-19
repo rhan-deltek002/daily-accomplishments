@@ -122,6 +122,30 @@
     .import-feedback.err { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; display: block; }
     .import-note { font-size: 0.78rem; color: var(--muted); margin-top: 0.5rem; }
 
+    /* ── Tag visualizer ── */
+    .tag-viz { display: flex; flex-direction: column; gap: 2rem; }
+
+    /* Cloud */
+    .tag-cloud-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.5rem 1.75rem; }
+    .tag-cloud-wrap h3 { font-size: 0.78rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin-bottom: 1.25rem; }
+    .tag-cloud { display: flex; flex-wrap: wrap; gap: 0.6rem 0.9rem; align-items: center; line-height: 1.2; }
+    .cloud-tag {
+      cursor: pointer; font-weight: 600; color: var(--primary);
+      transition: opacity 0.15s;
+      padding: 2px 4px; border-radius: 4px;
+    }
+    .cloud-tag:hover { opacity: 0.7; }
+
+    /* Bar chart */
+    .tag-chart-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.5rem 1.75rem; }
+    .tag-chart-wrap h3 { font-size: 0.78rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin-bottom: 1.25rem; }
+    .tag-chart { display: flex; flex-direction: column; gap: 0.55rem; }
+    .bar-row { display: flex; align-items: center; gap: 0.75rem; }
+    .bar-label { font-size: 0.82rem; color: var(--text); min-width: 120px; text-align: right; flex-shrink: 0; }
+    .bar-track { flex: 1; height: 20px; background: var(--bg); border-radius: 4px; overflow: hidden; }
+    .bar-fill { height: 100%; background: var(--primary); border-radius: 4px; transition: width 0.4s ease; }
+    .bar-count { font-size: 0.78rem; color: var(--muted); min-width: 24px; }
+
     /* ── Theme toggle ── */
     .theme-toggle { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
     .theme-btn {
@@ -470,10 +494,24 @@
       <span>View:</span>
       <button class="toggle-btn active" id="btn-timeline" onclick="setView('timeline')">Timeline</button>
       <button class="toggle-btn" id="btn-annual" onclick="setView('annual')">Annual Review</button>
+      <button class="toggle-btn" id="btn-tags" onclick="setView('tags')">Tags</button>
     </div>
 
     <div id="result-info" class="result-info"></div>
     <div id="content"><div class="loading">Loading…</div></div>
+
+    <div id="tags-panel" style="display:none">
+      <div class="tag-viz">
+        <div class="tag-cloud-wrap">
+          <h3>Tag Cloud</h3>
+          <div class="tag-cloud" id="tag-cloud"></div>
+        </div>
+        <div class="tag-chart-wrap">
+          <h3>Tag Frequency</h3>
+          <div class="tag-chart" id="tag-chart"></div>
+        </div>
+      </div>
+    </div>
 
     <div id="settings-panel" style="display:none">
       <div class="settings-view">
@@ -632,7 +670,8 @@
       allData.length === 0 ? '' : `${allData.length} accomplishment${allData.length !== 1 ? 's' : ''}`;
 
     if (currentView === 'timeline') renderTimeline();
-    else renderAnnual();
+    else if (currentView === 'annual') renderAnnual();
+    else if (currentView === 'tags') renderTags();
   }
 
   function renderTimeline() {
@@ -755,20 +794,22 @@
   function setView(v) {
     currentView = v;
     const isSettings = v === 'settings';
+    const isTags = v === 'tags';
+    const isData = !isSettings && !isTags;
 
-    document.getElementById('view-toggle').style.display   = isSettings ? 'none' : '';
-    document.getElementById('result-info').style.display   = isSettings ? 'none' : '';
-    document.getElementById('content').style.display       = isSettings ? 'none' : '';
+    document.getElementById('view-toggle').style.display    = isSettings ? 'none' : '';
+    document.getElementById('result-info').style.display    = isData ? '' : 'none';
+    document.getElementById('content').style.display        = isData ? '' : 'none';
     document.getElementById('settings-panel').style.display = isSettings ? '' : 'none';
+    document.getElementById('tags-panel').style.display     = isTags ? '' : 'none';
     document.getElementById('btn-settings').classList.toggle('active', isSettings);
+    document.getElementById('btn-timeline').classList.toggle('active', v === 'timeline');
+    document.getElementById('btn-annual').classList.toggle('active', v === 'annual');
+    document.getElementById('btn-tags').classList.toggle('active', isTags);
 
-    if (!isSettings) {
-      document.getElementById('btn-timeline').classList.toggle('active', v === 'timeline');
-      document.getElementById('btn-annual').classList.toggle('active', v === 'annual');
-      renderView();
-    } else {
-      loadSettings();
-    }
+    if (isData) renderView();
+    else if (isSettings) loadSettings();
+    else if (isTags) renderTags();
   }
 
   async function loadSettings() {
@@ -1005,6 +1046,72 @@
       if (!r.ok) { alert('Delete failed'); return; }
       refresh();
     } catch (e) { alert('Delete failed: ' + e.message); }
+  }
+
+  // ── Tag Visualizer ───────────────────────────────────────────────────────
+  async function renderTags() {
+    document.getElementById('tag-cloud').innerHTML = '<span style="color:var(--muted);font-size:0.85rem">Loading…</span>';
+    document.getElementById('tag-chart').innerHTML = '';
+
+    // Fetch all accomplishments (respect current period filter)
+    let data = allData;
+    if (!data.length) {
+      try {
+        const r = await fetch('/api/accomplishments');
+        data = await r.json();
+      } catch { return; }
+    }
+
+    // Count tags
+    const counts = {};
+    for (const item of data) {
+      for (const tag of (item.tags || [])) {
+        const t = tag.trim().toLowerCase();
+        if (t) counts[t] = (counts[t] || 0) + 1;
+      }
+    }
+
+    const sorted = Object.entries(counts).sort(([, a], [, b]) => b - a);
+
+    if (!sorted.length) {
+      document.getElementById('tag-cloud').innerHTML =
+        '<span style="color:var(--muted);font-size:0.85rem">No tags found in the current view.</span>';
+      return;
+    }
+
+    const max = sorted[0][1];
+    const min = sorted[sorted.length - 1][1];
+
+    // Cloud — font size between 0.85rem and 2.4rem
+    const cloudHtml = sorted.map(([tag, count]) => {
+      const ratio = max === min ? 1 : (count - min) / (max - min);
+      const size = (0.85 + ratio * 1.55).toFixed(2);
+      const opacity = (0.5 + ratio * 0.5).toFixed(2);
+      return `<span class="cloud-tag" style="font-size:${size}rem;opacity:${opacity}"
+        onclick="filterByTag('${esc(tag)}')" title="${count} use${count !== 1 ? 's' : ''}">${esc(tag)}</span>`;
+    }).join('');
+    document.getElementById('tag-cloud').innerHTML = cloudHtml;
+
+    // Bar chart — top 20
+    const top = sorted.slice(0, 20);
+    const barHtml = top.map(([tag, count]) => {
+      const pct = ((count / max) * 100).toFixed(1);
+      return `
+        <div class="bar-row">
+          <span class="bar-label">${esc(tag)}</span>
+          <div class="bar-track">
+            <div class="bar-fill" style="width:${pct}%"></div>
+          </div>
+          <span class="bar-count">${count}</span>
+        </div>`;
+    }).join('');
+    document.getElementById('tag-chart').innerHTML = barHtml;
+  }
+
+  function filterByTag(tag) {
+    setView('timeline');
+    document.getElementById('filter-search').value = tag;
+    applyFilters();
   }
 
   // ── Theme ────────────────────────────────────────────────────────────────
