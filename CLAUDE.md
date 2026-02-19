@@ -44,6 +44,7 @@ Both scripts run `pip install` then call `claude mcp add daily-accomplishments -
   - Consolidate related work into one entry; don't log per-file or per-bug granularity
   - Default `context='work'` — but infer a different context if the work clearly relates to previously logged records with a different context (e.g. same project already tagged `side_project`). Never ask.
   - When in doubt, `update_accomplishment` an existing entry rather than creating a new one
+  - For long sessions, encourage incremental logging at natural breakpoints — conversation compaction can cause early-session details to be lost, so logging while the work is still in context produces more accurate records
 
 ## MCP tools
 

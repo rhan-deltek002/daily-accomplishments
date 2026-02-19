@@ -100,6 +100,11 @@ mcp = FastMCP(
         "a single entry — do not log one entry per file changed, bug fixed, or tool added. "
         "Aim for one entry per distinct, meaningful outcome. "
 
+        "For long sessions, encourage the user to log incrementally at natural breakpoints "
+        "(e.g. after completing a feature or fixing a bug) rather than only at the end. "
+        "Long conversations may be compacted, which causes early details to be lost — "
+        "logging while the work is still in context produces more accurate records. "
+
         "Default context='work'. You may infer a different context if the work is clearly "
         "related to a previously logged record with a different context — for example, if "
         "earlier records for the same project are tagged 'side_project', use that. "
