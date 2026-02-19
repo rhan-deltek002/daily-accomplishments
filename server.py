@@ -56,22 +56,30 @@ def _save_config(updates: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Creative name generator
+# Creative name generator  (pattern: ADJECTIVE_FRUIT)
 # ---------------------------------------------------------------------------
 _ADJECTIVES = [
     "golden", "amber", "azure", "crimson", "emerald", "sapphire", "silver",
     "stellar", "cosmic", "lunar", "radiant", "luminous", "serene", "vibrant",
     "timeless", "ancient", "vivid", "crystal", "noble", "twilight",
 ]
-_NOUNS = [
-    "chronicle", "archive", "vault", "tapestry", "ledger", "codex", "atlas",
-    "memoir", "saga", "annals", "folio", "compendium", "treasury", "scroll",
-    "tome", "almanac", "mosaic", "anthology", "journal", "registry",
+_FRUITS = [
+    "apple", "mango", "peach", "plum", "grape", "lemon", "cherry", "melon",
+    "kiwi", "pear", "fig", "guava", "lychee", "papaya", "apricot", "lime",
+    "coconut", "berry", "orange", "pomelo",
 ]
 
 
 def _creative_name() -> str:
-    return f"{random.choice(_ADJECTIVES)}_{random.choice(_NOUNS)}"
+    """Return a unique ADJECTIVE_FRUIT name not already in DB history."""
+    used = {h["display_name"] for h in _load_config().get("db_history", [])}
+    pool = [f"{a}_{f}" for a in _ADJECTIVES for f in _FRUITS]
+    random.shuffle(pool)
+    for name in pool:
+        if name not in used:
+            return name
+    # Fallback if all 400 combinations are somehow exhausted
+    return f"{random.choice(_ADJECTIVES)}_{random.choice(_FRUITS)}_{random.randint(1000, 9999)}"
 
 
 # ---------------------------------------------------------------------------
