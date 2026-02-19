@@ -22,9 +22,9 @@ pip3 install -r "$SCRIPT_DIR/requirements.txt" \
 
 # Windows (native, not WSL): run the equivalent manually in PowerShell —
 #   $env:ACCOMPLISHMENTS_DB = "$HOME\.daily-accomplishments\accomplishments.db"
-#   claude mcp add daily-accomplishments -e ACCOMPLISHMENTS_DB="$env:ACCOMPLISHMENTS_DB" -- python "$PSScriptRoot\server.py"
+#   claude mcp add daily-accomplishments --scope user -e ACCOMPLISHMENTS_DB="$env:ACCOMPLISHMENTS_DB" -- python "$PSScriptRoot\server.py"
 echo "Registering MCP server with Claude…"
-claude mcp add daily-accomplishments \
+claude mcp add daily-accomplishments --scope user \
   -e ACCOMPLISHMENTS_DB="$DB_PATH" \
   -- python3 "$SCRIPT_DIR/server.py"
 
