@@ -7,7 +7,7 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    :root {
+    :root, [data-theme="light"] {
       --bg:        #f1f5f9;
       --surface:   #ffffff;
       --border:    #e2e8f0;
@@ -15,6 +15,8 @@
       --muted:     #64748b;
       --primary:   #6366f1;
       --primary-h: #4f46e5;
+      --primary-bg: #eef2ff;
+      --stat-hover: #f8faff;
 
       --cat-feature:        #3b82f6;
       --cat-bugfix:         #ef4444;
@@ -30,6 +32,32 @@
       --imp-high:   #ef4444;
       --imp-medium: #f59e0b;
       --imp-low:    #10b981;
+    }
+
+    [data-theme="dark"] {
+      --bg:        #0f172a;
+      --surface:   #1e293b;
+      --border:    #334155;
+      --text:      #f1f5f9;
+      --muted:     #94a3b8;
+      --primary:   #818cf8;
+      --primary-h: #6366f1;
+      --primary-bg: #1e1b4b;
+      --stat-hover: #263351;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg:        #0f172a;
+        --surface:   #1e293b;
+        --border:    #334155;
+        --text:      #f1f5f9;
+        --muted:     #94a3b8;
+        --primary:   #818cf8;
+        --primary-h: #6366f1;
+        --primary-bg: #1e1b4b;
+        --stat-hover: #263351;
+      }
     }
 
     body {
@@ -60,7 +88,7 @@
       text-decoration: none; display: inline-flex; align-items: center;
     }
     header .header-btn:hover { border-color: var(--primary); color: var(--primary); }
-    header .header-btn.active { border-color: var(--primary); color: var(--primary); background: #eef2ff; }
+    header .header-btn.active { border-color: var(--primary); color: var(--primary); background: var(--primary-bg); }
 
     /* ── Settings view ── */
     .settings-view { max-width: 560px; }
@@ -94,6 +122,17 @@
     .import-feedback.err { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; display: block; }
     .import-note { font-size: 0.78rem; color: var(--muted); margin-top: 0.5rem; }
 
+    /* ── Theme toggle ── */
+    .theme-toggle { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    .theme-btn {
+      flex: 1; padding: 0.45rem 0.75rem; font-size: 0.82rem; cursor: pointer;
+      background: none; border: none; color: var(--muted);
+      border-right: 1px solid var(--border);
+    }
+    .theme-btn:last-child { border-right: none; }
+    .theme-btn:hover { background: var(--bg); color: var(--text); }
+    .theme-btn.active { background: var(--primary); color: white; font-weight: 600; }
+
     /* ── Stats bar ── */
     .stats-bar {
       display: grid;
@@ -109,8 +148,8 @@
       cursor: pointer;
       transition: background 0.1s;
     }
-    .stat:hover { background: #f8faff; }
-    .stat.active { background: #eef2ff; }
+    .stat:hover { background: var(--stat-hover); }
+    .stat.active { background: var(--primary-bg); }
     .stat .value { font-size: 1.6rem; font-weight: 700; color: var(--text); }
     .stat .label { font-size: 0.72rem; color: var(--muted); margin-top: 2px; text-transform: uppercase; letter-spacing: .04em; }
     .stat.highlight .value { color: var(--primary); }
@@ -314,6 +353,15 @@
     .btn-save:hover { background: var(--primary-h); }
   </style>
 </head>
+<script>
+  // Apply theme immediately (before render) to avoid flash
+  (function() {
+    const t = localStorage.getItem('theme') || 'system';
+    if (t === 'light') document.documentElement.setAttribute('data-theme', 'light');
+    else if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+    // 'system' — no attribute, CSS @media query handles it
+  })();
+</script>
 <body>
 
 <header>
@@ -429,6 +477,18 @@
 
     <div id="settings-panel" style="display:none">
       <div class="settings-view">
+        <div class="settings-section">
+          <h3>Appearance</h3>
+          <div class="settings-row">
+            <label>Theme</label>
+            <div class="theme-toggle">
+              <button class="theme-btn" data-theme="light" onclick="setTheme('light')">☀ Light</button>
+              <button class="theme-btn" data-theme="system" onclick="setTheme('system')">⊙ System</button>
+              <button class="theme-btn" data-theme="dark" onclick="setTheme('dark')">☾ Dark</button>
+            </div>
+          </div>
+        </div>
+
         <div class="settings-section">
           <h3>Database</h3>
           <div class="settings-row" style="margin-bottom:1.1rem">
@@ -946,6 +1006,35 @@
       refresh();
     } catch (e) { alert('Delete failed: ' + e.message); }
   }
+
+  // ── Theme ────────────────────────────────────────────────────────────────
+  function setTheme(theme) {
+    localStorage.setItem('theme', theme);
+    if (theme === 'light') document.documentElement.setAttribute('data-theme', 'light');
+    else if (theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+    else document.documentElement.removeAttribute('data-theme');
+    syncThemeButtons(theme);
+  }
+
+  function syncThemeButtons(theme) {
+    document.querySelectorAll('.theme-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.theme === theme);
+    });
+  }
+
+  // Keep buttons in sync when settings panel opens
+  const _origLoadSettings = loadSettings;
+  loadSettings = async function() {
+    await _origLoadSettings();
+    syncThemeButtons(localStorage.getItem('theme') || 'system');
+  };
+
+  // React to OS-level theme changes when set to system
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if ((localStorage.getItem('theme') || 'system') === 'system') {
+      document.documentElement.removeAttribute('data-theme');
+    }
+  });
 
   // ── Init ────────────────────────────────────────────────────────────────
   loadStats();
