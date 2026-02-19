@@ -100,9 +100,11 @@ mcp = FastMCP(
         "a single entry — do not log one entry per file changed, bug fixed, or tool added. "
         "Aim for one entry per distinct, meaningful outcome. "
 
-        "Always use context='work' unless the user explicitly says otherwise "
-        "(e.g. 'side_project', 'personal'). Never infer context from the conversation — "
-        "default to 'work'. Never ask the user to clarify context. "
+        "Default context='work'. You may infer a different context if the work is clearly "
+        "related to a previously logged record with a different context — for example, if "
+        "earlier records for the same project are tagged 'side_project', use that. "
+        "If the user explicitly specifies a context, always use that. "
+        "Never ask the user to clarify context. "
 
         "Use get_summary for annual performance review preparation."
     ),

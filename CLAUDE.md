@@ -42,7 +42,7 @@ Both scripts run `pip install` then call `claude mcp add daily-accomplishments -
 - **MCP server instructions** govern how Claude behaves when logging — see the `instructions=` string in `FastMCP(...)`. These are sent to every Claude instance that connects, so all users get consistent behaviour automatically. The rules encoded there:
   - Check today's existing records with `get_accomplishments` *before* logging anything
   - Consolidate related work into one entry; don't log per-file or per-bug granularity
-  - Default `context='work'` — never infer context from the conversation, never ask
+  - Default `context='work'` — but infer a different context if the work clearly relates to previously logged records with a different context (e.g. same project already tagged `side_project`). Never ask.
   - When in doubt, `update_accomplishment` an existing entry rather than creating a new one
 
 ## MCP tools
