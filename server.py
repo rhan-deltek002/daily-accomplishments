@@ -15,6 +15,8 @@ import tempfile
 import threading
 from typing import Optional
 
+from starlette.background import BackgroundTask
+
 import uvicorn
 from fastapi import FastAPI, Query, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
@@ -385,30 +387,53 @@ async def api_export():
 
 @web_app.post("/api/merge")
 async def api_merge(file: UploadFile = File(...)):
-    # Write upload to a temp file
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".db") as tmp:
+    # Write the uploaded source DB to a temp file
+    with tempfile.NamedTemporaryFile(delete=False, suffix="_source.db") as tmp:
         shutil.copyfileobj(file.file, tmp)
-        tmp_path = tmp.name
+        source_path = tmp.name
 
     # Validate it's a proper SQLite database with the right table
     try:
-        conn = sqlite3.connect(tmp_path)
+        conn = sqlite3.connect(source_path)
         conn.execute("SELECT COUNT(*) FROM accomplishments").fetchone()
         conn.close()
     except Exception as e:
-        os.unlink(tmp_path)
+        os.unlink(source_path)
         return JSONResponse(status_code=400, content={"error": f"Invalid database file: {e}"})
 
-    # Run migrations on the source so columns match before merging
-    try:
-        database.init_db(tmp_path)
-        result = database.merge_accomplishments(DB_PATH, tmp_path)
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"error": f"Merge failed: {e}"})
-    finally:
-        os.unlink(tmp_path)
+    # Create the output as a copy of the active DB — the active DB is never modified
+    output_path = source_path.replace("_source.db", "_merged.db")
+    shutil.copy2(DB_PATH, output_path)
 
-    return JSONResponse(content={"success": True, **result})
+    try:
+        # Run migrations on source so columns match, then merge into the copy
+        database.init_db(source_path)
+        result = database.merge_accomplishments(output_path, source_path)
+    except Exception as e:
+        os.unlink(source_path)
+        os.unlink(output_path)
+        return JSONResponse(status_code=500, content={"error": f"Merge failed: {e}"})
+
+    # Clean up both temp files after the response is sent
+    def cleanup():
+        for p in (source_path, output_path):
+            try:
+                os.unlink(p)
+            except OSError:
+                pass
+
+    headers = {
+        "X-Merge-Added": str(result["added"]),
+        "X-Merge-Skipped": str(result["skipped"]),
+        "X-Merge-Total": str(result["total_source"]),
+    }
+    return FileResponse(
+        output_path,
+        media_type="application/octet-stream",
+        filename="merged_accomplishments.db",
+        headers=headers,
+        background=BackgroundTask(cleanup),
+    )
 
 
 # ---------------------------------------------------------------------------

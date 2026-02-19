@@ -544,9 +544,9 @@
         <div class="settings-section">
           <h3>Merge Database</h3>
           <p class="import-note" style="margin-bottom:1rem">
-            Combine records from another database into this one — useful when you've been
-            logging on multiple machines. Duplicates (same title, date, and description)
-            are skipped automatically.
+            Combine the active database with another one into a new file — both originals
+            are left untouched. Duplicates (same title, date, and description) are skipped.
+            The merged result downloads automatically.
           </p>
           <div class="settings-row">
             <button class="settings-btn primary" onclick="document.getElementById('merge-input').click()">⇢ Select DB to Merge</button>
@@ -843,17 +843,29 @@
 
     try {
       const r = await fetch('/api/merge', { method: 'POST', body: form });
-      const data = await r.json();
       if (!r.ok) {
+        const data = await r.json();
         feedback.textContent = '✕ ' + (data.error || 'Merge failed');
         feedback.className = 'import-feedback err';
-      } else {
-        const { added, skipped, total_source } = data;
-        feedback.textContent = `✓ Merged ${added} new record${added !== 1 ? 's' : ''} from ${total_source} — ${skipped} duplicate${skipped !== 1 ? 's' : ''} skipped`;
-        feedback.className = 'import-feedback ok';
-        loadStats();
-        loadData(periodToParams(currentPeriod));
+        return;
       }
+
+      // Read stats from response headers
+      const added  = r.headers.get('X-Merge-Added');
+      const skipped = r.headers.get('X-Merge-Skipped');
+      const total   = r.headers.get('X-Merge-Total');
+
+      // Trigger download of the merged DB
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'merged_accomplishments.db';
+      a.click();
+      URL.revokeObjectURL(url);
+
+      feedback.textContent = `✓ Done — ${added} new record${added != 1 ? 's' : ''} from ${total} merged, ${skipped} duplicate${skipped != 1 ? 's' : ''} skipped. Merged database downloaded.`;
+      feedback.className = 'import-feedback ok';
     } catch (e) {
       feedback.textContent = '✕ ' + e.message;
       feedback.className = 'import-feedback err';
