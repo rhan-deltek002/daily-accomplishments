@@ -2,6 +2,19 @@
 
 An MCP server that lets Claude log your daily accomplishments automatically, with a web dashboard to review them — including an annual review mode great for performance reviews.
 
+## What is this?
+
+**Daily Accomplishments** is a personal productivity tool that runs inside Claude Code.
+
+Instead of manually writing down what you did each day, Claude tracks it for you as you work. At review time, pull up a timeline or annual summary — great for performance reviews or just reflecting on your progress.
+
+- **Logging via Claude** — Claude logs entries using natural language tools as you work
+- **Smart deduplication** — checks existing records before logging to avoid duplicates and consolidates related work
+- **Web dashboard** — Timeline view, annual review, and settings in a single lightweight frontend
+- **AI-assisted merge** — if you have databases from multiple machines, Claude can intelligently merge them, identifying near-duplicates
+
+Think of it as a *work journal that writes itself.*
+
 ## How it works
 
 1. At the end of any Claude Code session, say: **"Log today's accomplishments"**
