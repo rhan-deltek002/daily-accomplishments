@@ -391,8 +391,9 @@
 
 <header>
   <h1 onclick="setView('timeline')">Daily Accomplishments</h1>
-  <button class="header-btn" id="btn-settings" onclick="setView('settings')">⚙ Settings</button>
   <button class="header-btn" onclick="refresh()">↻ Refresh</button>
+  <button class="header-btn" id="btn-settings" onclick="setView('settings')">⚙ Settings</button>
+  <button class="header-btn" id="btn-theme" onclick="cycleTheme()" title="Toggle theme">⊙</button>
 </header>
 
 <div class="stats-bar">
@@ -516,18 +517,6 @@
 
     <div id="settings-panel" style="display:none">
       <div class="settings-view">
-        <div class="settings-section">
-          <h3>Appearance</h3>
-          <div class="settings-row">
-            <label>Theme</label>
-            <div class="theme-toggle">
-              <button class="theme-btn" data-theme="light" onclick="setTheme('light')">☀ Light</button>
-              <button class="theme-btn" data-theme="system" onclick="setTheme('system')">⊙ System</button>
-              <button class="theme-btn" data-theme="dark" onclick="setTheme('dark')">☾ Dark</button>
-            </div>
-          </div>
-        </div>
-
         <div class="settings-section">
           <h3>Database</h3>
           <div class="settings-row" style="margin-bottom:1.1rem">
@@ -1163,26 +1152,25 @@
   }
 
   // ── Theme ────────────────────────────────────────────────────────────────
+  const THEME_CYCLE = ['system', 'light', 'dark'];
+  const THEME_ICONS = { system: '⊙', light: '☀', dark: '☾' };
+  const THEME_LABELS = { system: 'System theme', light: 'Light theme', dark: 'Dark theme' };
+
   function setTheme(theme) {
     localStorage.setItem('theme', theme);
     if (theme === 'light') document.documentElement.setAttribute('data-theme', 'light');
     else if (theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
     else document.documentElement.removeAttribute('data-theme');
-    syncThemeButtons(theme);
+    const btn = document.getElementById('btn-theme');
+    btn.textContent = THEME_ICONS[theme];
+    btn.title = THEME_LABELS[theme];
   }
 
-  function syncThemeButtons(theme) {
-    document.querySelectorAll('.theme-btn').forEach(b => {
-      b.classList.toggle('active', b.dataset.theme === theme);
-    });
+  function cycleTheme() {
+    const current = localStorage.getItem('theme') || 'system';
+    const next = THEME_CYCLE[(THEME_CYCLE.indexOf(current) + 1) % THEME_CYCLE.length];
+    setTheme(next);
   }
-
-  // Keep buttons in sync when settings panel opens
-  const _origLoadSettings = loadSettings;
-  loadSettings = async function() {
-    await _origLoadSettings();
-    syncThemeButtons(localStorage.getItem('theme') || 'system');
-  };
 
   // React to OS-level theme changes when set to system
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
@@ -1190,6 +1178,14 @@
       document.documentElement.removeAttribute('data-theme');
     }
   });
+
+  // Sync icon on load
+  (function() {
+    const t = localStorage.getItem('theme') || 'system';
+    const btn = document.getElementById('btn-theme');
+    btn.textContent = THEME_ICONS[t];
+    btn.title = THEME_LABELS[t];
+  })();
 
   // ── Init ────────────────────────────────────────────────────────────────
   loadStats();
