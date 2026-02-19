@@ -12,7 +12,7 @@ if errorlevel 1 (
 )
 
 echo Registering MCP server with Claude...
-claude mcp add daily-accomplishments --scope user -e ACCOMPLISHMENTS_DB="%DB_PATH%" -- python "%SCRIPT_DIR%server.py"
+claude mcp add daily-accomplishments -e ACCOMPLISHMENTS_DB="%DB_PATH%" -- python "%SCRIPT_DIR%server.py"
 if errorlevel 1 (
     echo ERROR: Failed to register MCP. Make sure Claude Code is installed.
     exit /b 1

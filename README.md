@@ -35,6 +35,32 @@ cd daily-accomplishments
 install.bat
 ```
 
+### MCP scope — project vs user
+
+The install scripts register the MCP at **project scope** by default — it's only active when Claude Code is opened inside that specific project directory.
+
+To make it available **across all your projects**, register it manually with `--scope user`:
+
+```bash
+# Linux / macOS / WSL
+claude mcp add daily-accomplishments --scope user \
+  -e ACCOMPLISHMENTS_DB="$HOME/.daily-accomplishments/accomplishments.db" \
+  -- python3 /path/to/daily-accomplishments/server.py
+```
+
+```bat
+rem Windows
+claude mcp add daily-accomplishments --scope user ^
+  -e ACCOMPLISHMENTS_DB="%USERPROFILE%\.daily-accomplishments\accomplishments.db" ^
+  -- python C:\path\to\daily-accomplishments\server.py
+```
+
+To switch an existing installation from project to user scope:
+```bash
+claude mcp remove daily-accomplishments
+# then re-run the command above with --scope user
+```
+
 ## Database location
 
 | Platform | Default path |
