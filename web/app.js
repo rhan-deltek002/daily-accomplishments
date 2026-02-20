@@ -837,6 +837,7 @@ function setTheme(theme) {
   const btn = document.getElementById('btn-theme');
   btn.innerHTML = THEME_ICONS[theme];
   btn.title = THEME_LABELS[theme];
+  if (currentView === 'tags') renderTags();
 }
 
 function cycleTheme() {
