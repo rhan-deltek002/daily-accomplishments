@@ -46,6 +46,7 @@ Both scripts run `pip install` then call `claude mcp add daily-accomplishments -
   - Default `context='work'` — but infer a different context if the work clearly relates to previously logged records with a different context (e.g. same project already tagged `side_project`). Never ask.
   - When in doubt, `update_accomplishment` an existing entry rather than creating a new one
   - For long sessions, encourage incremental logging at natural breakpoints — conversation compaction can cause early-session details to be lost, so logging while the work is still in context produces more accurate records
+  - When presenting a summary, write a structured narrative grouped by project — not raw numbers. Lead with what was delivered and why it matters, suitable for a performance review.
 
 ## MCP tools
 

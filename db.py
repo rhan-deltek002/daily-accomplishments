@@ -131,7 +131,14 @@ def search_accomplishments(db_path: str, query: str) -> list:
         return [_row_to_dict(row) for row in rows]
 
 
-def get_summary(db_path: str, period: str = "this_year") -> dict:
+def get_summary(
+    db_path: str,
+    period: str = "this_year",
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    include_records: bool = False,
+    project: Optional[str] = None,
+) -> dict:
     today = date.today()
 
     date_ranges = {
@@ -155,8 +162,13 @@ def get_summary(db_path: str, period: str = "this_year") -> dict:
         "all_time": ("2000-01-01", today.strftime("%Y-%m-%d")),
     }
 
-    date_from, date_to = date_ranges.get(period, date_ranges["all_time"])
-    items = get_accomplishments(db_path, date_from=date_from, date_to=date_to)
+    if date_from or date_to:
+        period = "custom"
+        date_from = date_from or "2000-01-01"
+        date_to = date_to or today.strftime("%Y-%m-%d")
+    else:
+        date_from, date_to = date_ranges.get(period, date_ranges["all_time"])
+    items = get_accomplishments(db_path, date_from=date_from, date_to=date_to, project=project)
 
     by_category: dict[str, int] = {}
     by_impact: dict[str, int] = {"low": 0, "medium": 0, "high": 0}
@@ -174,7 +186,7 @@ def get_summary(db_path: str, period: str = "this_year") -> dict:
         if proj:
             by_project[proj] = by_project.get(proj, 0) + 1
 
-    return {
+    result = {
         "period": period,
         "date_from": date_from,
         "date_to": date_to,
@@ -183,8 +195,10 @@ def get_summary(db_path: str, period: str = "this_year") -> dict:
         "by_impact": by_impact,
         "by_month": by_month,
         "by_project": by_project,
-        "accomplishments": items,
     }
+    if include_records:
+        result["accomplishments"] = items
+    return result
 
 
 def update_accomplishment(

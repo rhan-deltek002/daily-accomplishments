@@ -227,6 +227,71 @@ class TestGetSummary:
         summary = db.get_summary(tmp_db, "all_time")
         assert summary["total"] == 2
 
+    def test_custom_date_range_overrides_period(self, tmp_db):
+        _log(tmp_db, title="In range",  date_str="2026-01-15")
+        _log(tmp_db, title="Out range", date_str="2026-04-01")
+
+        summary = db.get_summary(tmp_db, date_from="2026-01-01", date_to="2026-03-31")
+        assert summary["total"] == 1
+        assert summary["period"] == "custom"
+
+    def test_custom_date_from_only(self, tmp_db):
+        _log(tmp_db, title="Old",   date_str="2025-06-01")
+        _log(tmp_db, title="Recent", date_str="2026-01-01")
+
+        summary = db.get_summary(tmp_db, date_from="2026-01-01")
+        assert summary["total"] == 1
+
+    def test_custom_date_to_only(self, tmp_db):
+        _log(tmp_db, title="Old",   date_str="2025-06-01")
+        _log(tmp_db, title="Recent", date_str="2026-01-01")
+
+        summary = db.get_summary(tmp_db, date_to="2025-12-31")
+        assert summary["total"] == 1
+
+    def test_custom_range_returns_breakdown(self, tmp_db):
+        _log(tmp_db, category="feature",  project="app-one", date_str="2026-02-01")
+        _log(tmp_db, category="bugfix",   project="app-two", date_str="2026-02-15")
+
+        summary = db.get_summary(tmp_db, date_from="2026-02-01", date_to="2026-02-28")
+        assert summary["by_category"]["feature"] == 1
+        assert summary["by_category"]["bugfix"] == 1
+        assert summary["by_project"]["app-one"] == 1
+        assert summary["by_project"]["app-two"] == 1
+
+    def test_records_excluded_by_default(self, tmp_db):
+        _log(tmp_db)
+        summary = db.get_summary(tmp_db, "all_time")
+        assert "accomplishments" not in summary
+
+    def test_records_included_when_requested(self, tmp_db):
+        _log(tmp_db, title="My work")
+        summary = db.get_summary(tmp_db, "all_time", include_records=True)
+        assert "accomplishments" in summary
+        assert len(summary["accomplishments"]) == 1
+        assert summary["accomplishments"][0]["title"] == "My work"
+
+    def test_records_excluded_with_custom_range(self, tmp_db):
+        _log(tmp_db, date_str="2026-02-01")
+        summary = db.get_summary(tmp_db, date_from="2026-02-01", date_to="2026-02-28")
+        assert "accomplishments" not in summary
+
+    def test_project_filter(self, tmp_db):
+        _log(tmp_db, title="A", project="app-one")
+        _log(tmp_db, title="B", project="app-two")
+
+        summary = db.get_summary(tmp_db, "all_time", project="app-one")
+        assert summary["total"] == 1
+        assert summary["by_project"] == {"app-one": 1}
+
+    def test_project_filter_with_records(self, tmp_db):
+        _log(tmp_db, title="A", project="app-one")
+        _log(tmp_db, title="B", project="app-two")
+
+        summary = db.get_summary(tmp_db, "all_time", project="app-one", include_records=True)
+        assert len(summary["accomplishments"]) == 1
+        assert summary["accomplishments"][0]["title"] == "A"
+
 
 # ---------------------------------------------------------------------------
 # execute_merge

@@ -166,7 +166,11 @@ mcp = FastMCP(
         "If the user explicitly specifies a context, always use that. "
         "Never ask the user to clarify context. "
 
-        "Use get_summary for annual performance review preparation. "
+        "Use get_summary for performance review preparation. After retrieving the data, "
+        "present it as a structured narrative grouped by project — not just raw numbers. "
+        "For large date ranges, use the two-pass strategy: first call get_summary without "
+        "include_records to discover projects, then call it again per project with "
+        "include_records=True to get the full details for each section. "
 
         "To merge databases: warn the user first that this can be token-intensive for large "
         "databases (all records are loaded into context). Then call get_merge_candidates with "
@@ -261,20 +265,52 @@ def search_accomplishments(query: str) -> list:
 
 
 @mcp.tool()
-def get_summary(period: str = "this_year") -> dict:
+def get_summary(
+    period: str = "this_year",
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    include_records: bool = False,
+    project: Optional[str] = None,
+) -> dict:
     """
     Get a summary of accomplishments for a time period.
 
-    Ideal for annual performance reviews — shows totals broken down by
-    category, impact level, and month.
+    Ideal for performance reviews — shows totals broken down by
+    category, impact level, month, and project.
+
+    Provide either period OR date_from/date_to for a custom range.
+    When date_from/date_to are provided they take precedence over period.
 
     Args:
         period: One of: today, this_week, this_month, this_year,
                 last_year, all_time
+        date_from: Start date YYYY-MM-DD (inclusive). Use for custom ranges
+                   such as a quarter (e.g. "2026-01-01") or fiscal period.
+        date_to: End date YYYY-MM-DD (inclusive).
+        include_records: Whether to include the full list of accomplishment
+                         records in the response. Defaults to False to keep
+                         token usage low. Set to True when you need the full
+                         descriptions to write a detailed narrative summary.
+        project: Filter to a single project. Use in the second pass of a
+                 multi-project summary (see below).
+
+    After retrieving the data, present it as a structured performance summary
+    worth showing to a manager — not just raw numbers. Group accomplishments
+    by project, highlight high-impact work, call out key deliverables by name,
+    and include relevant technical detail. Use a narrative format with clear
+    headings. Lead with what was delivered and why it matters.
+
+    For large date ranges (e.g. a full year), use this two-pass strategy to
+    keep token usage manageable:
+    1. Call get_summary without include_records to get the breakdown and the
+       list of projects (by_project).
+    2. For each project in by_project, call get_summary again with
+       include_records=True and project=<name> — this keeps each call small
+       and focused, and lets you write a detailed section per project.
     """
-    if period not in VALID_PERIODS:
+    if not (date_from or date_to) and period not in VALID_PERIODS:
         return {"error": f"Invalid period '{period}'. Must be one of: {VALID_PERIODS}"}
-    return database.get_summary(DB_PATH, period)
+    return database.get_summary(DB_PATH, period, date_from, date_to, include_records, project)
 
 
 @mcp.tool()
