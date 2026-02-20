@@ -150,6 +150,8 @@ mcp = FastMCP(
         "update_accomplishment rather than creating duplicates. Consolidate related work into "
         "a single entry — do not log one entry per file changed, bug fixed, or tool added. "
         "Aim for one entry per distinct, meaningful outcome. "
+        "Keep descriptions concise — 2 to 3 sentences is usually enough. "
+        "Exceed this only when the work is genuinely complex and a short description would lose important context. "
         "If the workspace is a git repository, populate the project field with the project name "
         "(derived from the git remote URL or the repository folder name). "
 
