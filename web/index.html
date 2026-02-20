@@ -363,6 +363,13 @@
     .context-personal     { color: #065f46; background: #ecfdf5; border-color: #a7f3d0; }
     .context-other        { color: #92400e; background: #fffbeb; border-color: #fde68a; }
 
+    /* ── Project badge ── */
+    .project-badge {
+      font-size: 0.68rem; padding: 2px 7px; border-radius: 4px; font-weight: 500;
+      color: #0f766e; background: #f0fdfa; border: 1px solid #99f6e4;
+      font-family: monospace;
+    }
+
     /* ── Edit modal ── */
     .modal-backdrop {
       display: none; position: fixed; inset: 0;
@@ -491,6 +498,11 @@
         <option value="side_project">Side Project</option>
         <option value="personal">Personal</option>
       </select>
+    </div>
+
+    <div class="filter-group">
+      <label>Project</label>
+      <input type="text" id="filter-project" placeholder="project name…">
     </div>
 
     <button class="apply-btn" onclick="applyFilters()">Apply Filters</button>
@@ -624,6 +636,10 @@
     <div class="field">
       <label>Context</label>
       <input type="text" id="edit-context" placeholder="work, side_project, personal…">
+    </div>
+    <div class="field">
+      <label>Project</label>
+      <input type="text" id="edit-project" placeholder="my-app, daily-accomplishments…">
     </div>
     <div class="field">
       <label>Tags (comma-separated)</label>
@@ -789,6 +805,7 @@
     const time = item.created_at ? item.created_at.slice(11, 16) : '';
     const ctx = item.context || 'work';
     const ctxLabel = ctx.replace(/_/g, ' ');
+    const proj = item.project;
     return `
       <div class="card" data-id="${item.id}">
         <div class="card-actions">
@@ -803,6 +820,7 @@
         <div class="card-footer">
           <span class="context-badge ${contextClass(ctx)}">${esc(ctxLabel)}</span>
           <span class="cat-badge" style="background:${catColor}">${item.category}</span>
+          ${proj ? `<span class="project-badge">${esc(proj)}</span>` : ''}
           ${tags}
           ${time ? `<span class="card-time">${time}</span>` : ''}
         </div>
@@ -1071,11 +1089,12 @@
     const category = document.getElementById('filter-category').value;
     const impact   = document.getElementById('filter-impact').value;
     const context  = document.getElementById('filter-context').value;
+    const project  = document.getElementById('filter-project').value.trim();
 
     document.querySelectorAll('.stat').forEach(s => s.classList.remove('active'));
     document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
 
-    loadData({ search, date_from: from, date_to: to, category, impact_level: impact, context });
+    loadData({ search, date_from: from, date_to: to, category, impact_level: impact, context, project });
   }
 
   function clearFilters() {
@@ -1085,6 +1104,7 @@
     document.getElementById('filter-category').value = '';
     document.getElementById('filter-impact').value = '';
     document.getElementById('filter-context').value = '';
+    document.getElementById('filter-project').value = '';
     document.querySelectorAll('.stat').forEach(s => s.classList.remove('active'));
     document.querySelectorAll('.period-btn').forEach(b => {
       b.classList.toggle('active', b.dataset.period === 'this_year');
@@ -1100,6 +1120,7 @@
     document.getElementById('filter-category').value = '';
     document.getElementById('filter-impact').value = '';
     document.getElementById('filter-context').value = '';
+    document.getElementById('filter-project').value = '';
   }
 
   function debounceSearch() {
@@ -1150,6 +1171,7 @@
     document.getElementById('edit-impact').value      = item.impact_level;
     document.getElementById('edit-date').value        = item.date;
     document.getElementById('edit-context').value     = item.context || 'work';
+    document.getElementById('edit-project').value     = item.project || '';
     document.getElementById('edit-tags').value        = (item.tags || []).join(', ');
     document.getElementById('edit-modal').classList.add('open');
   }
@@ -1171,6 +1193,7 @@
       impact_level: document.getElementById('edit-impact').value,
       date:         document.getElementById('edit-date').value,
       context:      document.getElementById('edit-context').value.trim() || 'work',
+      project:      document.getElementById('edit-project').value.trim() || null,
       tags,
     };
     try {

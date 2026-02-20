@@ -150,6 +150,8 @@ mcp = FastMCP(
         "update_accomplishment rather than creating duplicates. Consolidate related work into "
         "a single entry — do not log one entry per file changed, bug fixed, or tool added. "
         "Aim for one entry per distinct, meaningful outcome. "
+        "If the workspace is a git repository, populate the project field with the project name "
+        "(derived from the git remote URL or the repository folder name). "
 
         "For long sessions, encourage the user to log incrementally at natural breakpoints "
         "(e.g. after completing a feature or fixing a bug) rather than only at the end. "
@@ -189,6 +191,7 @@ def log_accomplishment(
     tags: list[str] = [],
     date: Optional[str] = None,
     context: str = "work",
+    project: Optional[str] = None,
 ) -> dict:
     """
     Log a new accomplishment or completed task.
@@ -207,6 +210,8 @@ def log_accomplishment(
         context: Where this work belongs — e.g. "work", "side_project",
                  "personal", or any custom label. Always defaults to "work"
                  unless the user explicitly says otherwise.
+        project: Project name (e.g. "my-app", "daily-accomplishments").
+                 If the workspace is a git repo, derive from remote URL or folder name.
     """
     if category not in VALID_CATEGORIES:
         return {"error": f"Invalid category '{category}'. Must be one of: {VALID_CATEGORIES}"}
@@ -214,9 +219,9 @@ def log_accomplishment(
         return {"error": f"Invalid impact_level '{impact_level}'. Must be one of: {VALID_IMPACT}"}
 
     record = database.log_accomplishment(
-        DB_PATH, title, description, category, impact_level, tags, date, context
+        DB_PATH, title, description, category, impact_level, tags, date, context, project
     )
-    return {"success": True, "id": record["id"], "title": record["title"], "date": record["date"], "context": record["context"]}
+    return {"success": True, "id": record["id"], "title": record["title"], "date": record["date"], "context": record["context"], "project": record.get("project")}
 
 
 @mcp.tool()
@@ -226,6 +231,7 @@ def get_accomplishments(
     category: Optional[str] = None,
     impact_level: Optional[str] = None,
     context: Optional[str] = None,
+    project: Optional[str] = None,
 ) -> list:
     """
     Retrieve logged accomplishments with optional filters.
@@ -236,8 +242,9 @@ def get_accomplishments(
         category: Filter by category
         impact_level: Filter by impact (low | medium | high)
         context: Filter by context (e.g. "work", "side_project", "personal")
+        project: Filter by project name
     """
-    return database.get_accomplishments(DB_PATH, date_from, date_to, category, impact_level, context)
+    return database.get_accomplishments(DB_PATH, date_from, date_to, category, impact_level, context, project)
 
 
 @mcp.tool()
@@ -278,6 +285,7 @@ def update_accomplishment(
     tags: Optional[list[str]] = None,
     date: Optional[str] = None,
     context: Optional[str] = None,
+    project: Optional[str] = None,
 ) -> dict:
     """
     Edit an existing accomplishment by its ID.
@@ -292,13 +300,14 @@ def update_accomplishment(
         tags: New tags list (replaces existing tags)
         date: New date in YYYY-MM-DD format
         context: New context (e.g. "work", "side_project", "personal")
+        project: New project name
     """
     if category is not None and category not in VALID_CATEGORIES:
         return {"error": f"Invalid category '{category}'. Must be one of: {VALID_CATEGORIES}"}
     if impact_level is not None and impact_level not in VALID_IMPACT:
         return {"error": f"Invalid impact_level '{impact_level}'. Must be one of: {VALID_IMPACT}"}
 
-    updated = database.update_accomplishment(DB_PATH, id, title, description, category, impact_level, tags, date, context)
+    updated = database.update_accomplishment(DB_PATH, id, title, description, category, impact_level, tags, date, context, project)
     if updated is None:
         return {"error": f"No accomplishment found with id={id}, or no fields were provided to update."}
     return {"success": True, "accomplishment": updated}
@@ -395,14 +404,17 @@ async def api_accomplishments(
     category: Optional[str] = Query(None),
     impact_level: Optional[str] = Query(None),
     context: Optional[str] = Query(None),
+    project: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
 ):
     if search:
         results = database.search_accomplishments(DB_PATH, search)
         if context:
             results = [r for r in results if r.get("context") == context]
+        if project:
+            results = [r for r in results if r.get("project") == project]
     else:
-        results = database.get_accomplishments(DB_PATH, date_from, date_to, category, impact_level, context)
+        results = database.get_accomplishments(DB_PATH, date_from, date_to, category, impact_level, context, project)
     return JSONResponse(content=results)
 
 
@@ -473,6 +485,7 @@ async def api_update(id: int, body: dict):
         tags=body.get("tags"),
         date_str=body.get("date"),
         context=body.get("context"),
+        project=body.get("project"),
     )
     if updated is None:
         return JSONResponse(status_code=404, content={"error": "Not found or nothing to update"})

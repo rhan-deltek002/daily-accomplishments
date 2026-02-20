@@ -32,6 +32,11 @@ def init_db(db_path: str) -> None:
             conn.execute("ALTER TABLE accomplishments ADD COLUMN context TEXT NOT NULL DEFAULT 'work'")
         except sqlite3.OperationalError:
             pass  # Column already exists
+        # Migration: add project column to existing databases
+        try:
+            conn.execute("ALTER TABLE accomplishments ADD COLUMN project TEXT")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
         conn.commit()
 
 
@@ -53,6 +58,7 @@ def log_accomplishment(
     tags: Optional[list] = None,
     date_str: Optional[str] = None,
     context: str = "work",
+    project: Optional[str] = None,
 ) -> dict:
     if tags is None:
         tags = []
@@ -62,10 +68,10 @@ def log_accomplishment(
     with get_conn(db_path) as conn:
         cursor = conn.execute(
             """
-            INSERT INTO accomplishments (title, description, category, impact_level, tags, date, context)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO accomplishments (title, description, category, impact_level, tags, date, context, project)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (title, description, category, impact_level, json.dumps(tags), date_str, context),
+            (title, description, category, impact_level, json.dumps(tags), date_str, context, project),
         )
         conn.commit()
         row = conn.execute(
@@ -81,6 +87,7 @@ def get_accomplishments(
     category: Optional[str] = None,
     impact_level: Optional[str] = None,
     context: Optional[str] = None,
+    project: Optional[str] = None,
 ) -> list:
     query = "SELECT * FROM accomplishments WHERE 1=1"
     params = []
@@ -100,6 +107,9 @@ def get_accomplishments(
     if context:
         query += " AND context = ?"
         params.append(context)
+    if project:
+        query += " AND project = ?"
+        params.append(project)
 
     query += " ORDER BY date DESC, created_at DESC"
 
@@ -113,10 +123,10 @@ def search_accomplishments(db_path: str, query: str) -> list:
         rows = conn.execute(
             """
             SELECT * FROM accomplishments
-            WHERE title LIKE ? OR description LIKE ? OR tags LIKE ?
+            WHERE title LIKE ? OR description LIKE ? OR tags LIKE ? OR project LIKE ?
             ORDER BY date DESC, created_at DESC
             """,
-            (f"%{query}%", f"%{query}%", f"%{query}%"),
+            (f"%{query}%", f"%{query}%", f"%{query}%", f"%{query}%"),
         ).fetchall()
         return [_row_to_dict(row) for row in rows]
 
@@ -151,6 +161,7 @@ def get_summary(db_path: str, period: str = "this_year") -> dict:
     by_category: dict[str, int] = {}
     by_impact: dict[str, int] = {"low": 0, "medium": 0, "high": 0}
     by_month: dict[str, int] = {}
+    by_project: dict[str, int] = {}
 
     for item in items:
         cat = item["category"]
@@ -159,6 +170,9 @@ def get_summary(db_path: str, period: str = "this_year") -> dict:
         by_impact[lvl] = by_impact.get(lvl, 0) + 1
         month = item["date"][:7]
         by_month[month] = by_month.get(month, 0) + 1
+        proj = item.get("project")
+        if proj:
+            by_project[proj] = by_project.get(proj, 0) + 1
 
     return {
         "period": period,
@@ -168,6 +182,7 @@ def get_summary(db_path: str, period: str = "this_year") -> dict:
         "by_category": by_category,
         "by_impact": by_impact,
         "by_month": by_month,
+        "by_project": by_project,
         "accomplishments": items,
     }
 
@@ -182,6 +197,7 @@ def update_accomplishment(
     tags: Optional[list] = None,
     date_str: Optional[str] = None,
     context: Optional[str] = None,
+    project: Optional[str] = None,
 ) -> Optional[dict]:
     fields, params = [], []
     if title is not None:
@@ -198,6 +214,8 @@ def update_accomplishment(
         fields.append("date = ?"); params.append(date_str)
     if context is not None:
         fields.append("context = ?"); params.append(context)
+    if project is not None:
+        fields.append("project = ?"); params.append(project)
 
     if not fields:
         return None
@@ -243,8 +261,8 @@ def merge_accomplishments(db_path: str, source_path: str) -> dict:
                 conn.execute(
                     """
                     INSERT INTO accomplishments
-                        (title, description, category, impact_level, tags, date, context, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        (title, description, category, impact_level, tags, date, context, project, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         r["title"], r["description"], r["category"],
@@ -252,6 +270,7 @@ def merge_accomplishments(db_path: str, source_path: str) -> dict:
                         json.dumps(r.get("tags") or []),
                         r["date"],
                         r.get("context", "work"),
+                        r.get("project"),
                         r.get("created_at"),
                     ),
                 )
@@ -326,8 +345,8 @@ def execute_merge(records: list, output_path: str) -> dict:
             conn.execute(
                 """
                 INSERT INTO accomplishments
-                    (title, description, category, impact_level, tags, date, context, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    (title, description, category, impact_level, tags, date, context, project, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     r["title"], r["description"], r["category"],
@@ -335,6 +354,7 @@ def execute_merge(records: list, output_path: str) -> dict:
                     json.dumps(r.get("tags") or []),
                     r["date"],
                     r.get("context", "work"),
+                    r.get("project"),
                     r.get("created_at"),
                 ),
             )

@@ -42,6 +42,7 @@ Both scripts run `pip install` then call `claude mcp add daily-accomplishments -
 - **MCP server instructions** govern how Claude behaves when logging — see the `instructions=` string in `FastMCP(...)`. These are sent to every Claude instance that connects, so all users get consistent behaviour automatically. The rules encoded there:
   - Check today's existing records with `get_accomplishments` *before* logging anything
   - Consolidate related work into one entry; don't log per-file or per-bug granularity
+  - If the workspace is a git repo, populate the `project` field with the project name (from remote URL or folder name)
   - Default `context='work'` — but infer a different context if the work clearly relates to previously logged records with a different context (e.g. same project already tagged `side_project`). Never ask.
   - When in doubt, `update_accomplishment` an existing entry rather than creating a new one
   - For long sessions, encourage incremental logging at natural breakpoints — conversation compaction can cause early-session details to be lost, so logging while the work is still in context produces more accurate records
@@ -50,7 +51,7 @@ Both scripts run `pip install` then call `claude mcp add daily-accomplishments -
 
 `log_accomplishment`, `get_accomplishments`, `search_accomplishments`, `get_summary`, `update_accomplishment`, `delete_accomplishment`, `get_merge_candidates`, `execute_merge`
 
-Valid values: categories — `feature bugfix learning review design documentation refactor infrastructure meeting other`; impact — `low medium high`; context — free-form string, common values `work side_project personal`.
+Valid values: categories — `feature bugfix learning review design documentation refactor infrastructure meeting other`; impact — `low medium high`; context — free-form string, common values `work side_project personal`; project — free-form string (e.g. `daily-accomplishments`, `my-app`).
 
 **AI-assisted merge workflow** (`get_merge_candidates` → `execute_merge`):
 1. `get_merge_candidates(source_paths)` — reads all records from the given files, labels them by source, pre-flags exact duplicates (same title+date+description). Near-duplicates are returned unlabelled for Claude to judge.
