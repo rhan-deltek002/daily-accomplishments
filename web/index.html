@@ -122,6 +122,16 @@
     .import-feedback.err { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; display: block; }
     .import-note { font-size: 0.78rem; color: var(--muted); margin-top: 0.5rem; }
 
+    /* ── Palette theming ── */
+    .palette-swatches { display: flex; gap: 0.4rem; margin: 0.75rem 0 0.3rem; flex-wrap: wrap; }
+    .swatch {
+      width: 28px; height: 28px; border-radius: 6px;
+      border: 1px solid rgba(0,0,0,.12); flex-shrink: 0; cursor: default;
+      transition: transform 0.1s;
+    }
+    .swatch:hover { transform: scale(1.15); }
+    .palette-source { font-size: 0.75rem; color: var(--muted); font-style: italic; }
+
     /* ── DB history ── */
     .history-item {
       display: flex; align-items: center; gap: 0.6rem;
@@ -404,12 +414,30 @@
   </style>
 </head>
 <script>
-  // Apply theme immediately (before render) to avoid flash
+  // Apply theme + palette immediately (before render) to avoid flash
   (function() {
     const t = localStorage.getItem('theme') || 'system';
     if (t === 'light') document.documentElement.setAttribute('data-theme', 'light');
     else if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
     // 'system' — no attribute, CSS @media query handles it
+
+    // Inject saved palette CSS before paint
+    const ph = localStorage.getItem('paletteHue');
+    const ps = localStorage.getItem('paletteSat');
+    if (ph && ps) {
+      const h = Math.round(parseFloat(ph));
+      const s = Math.round(Math.min(Math.max(parseFloat(ps) * 100, 30), 75));
+      const st = document.createElement('style');
+      st.id = 'palette-style';
+      st.textContent = _buildPaletteCSS(h, s);
+      document.head.appendChild(st);
+    }
+    function _buildPaletteCSS(h, s) {
+      return `
+        :root,[data-theme="light"]{--primary:hsl(${h},${s}%,50%);--primary-h:hsl(${h},${s}%,40%);--primary-bg:hsl(${h},${Math.round(s*.7)}%,93%);--bg:hsl(${h},${Math.round(s*.15)}%,94%);--surface:hsl(${h},${Math.round(s*.08)}%,99%);--border:hsl(${h},${Math.round(s*.15)}%,88%);--stat-hover:hsl(${h},${Math.round(s*.15)}%,97%)}
+        :root[data-theme="dark"]{--primary:hsl(${h},${Math.round(s*.75)}%,65%);--primary-h:hsl(${h},${Math.round(s*.75)}%,55%);--primary-bg:hsl(${h},${Math.round(s*.3)}%,18%);--bg:hsl(${h},${Math.round(s*.2)}%,8%);--surface:hsl(${h},${Math.round(s*.15)}%,13%);--border:hsl(${h},${Math.round(s*.15)}%,21%);--stat-hover:hsl(${h},${Math.round(s*.2)}%,17%)}
+        @media(prefers-color-scheme:dark){:root:not([data-theme="light"]):not([data-theme="dark"]){--primary:hsl(${h},${Math.round(s*.75)}%,65%);--primary-h:hsl(${h},${Math.round(s*.75)}%,55%);--primary-bg:hsl(${h},${Math.round(s*.3)}%,18%);--bg:hsl(${h},${Math.round(s*.2)}%,8%);--surface:hsl(${h},${Math.round(s*.15)}%,13%);--border:hsl(${h},${Math.round(s*.15)}%,21%);--stat-hover:hsl(${h},${Math.round(s*.2)}%,17%)}}`;
+    }
   })();
 </script>
 <body>
@@ -589,10 +617,30 @@
           </div>
           <div class="import-feedback" id="merge-feedback"></div>
         </div>
+
+        <div class="settings-section">
+          <h3>Appearance</h3>
+          <p class="import-note" style="margin-bottom:1rem">
+            Upload any image to extract its colour palette and theme the dashboard.
+            Works alongside the light / dark toggle.
+          </p>
+          <div class="settings-row">
+            <button class="settings-btn primary" onclick="document.getElementById('palette-input').click()">🎨 Upload Image</button>
+            <button class="settings-btn" id="clear-palette-btn" style="display:none" onclick="clearPalette()">✕ Reset Palette</button>
+            <input type="file" id="palette-input" accept="image/*" style="display:none" onchange="handlePaletteUpload(this)">
+          </div>
+          <div id="palette-preview-wrap" style="display:none">
+            <div class="palette-swatches" id="palette-swatches"></div>
+            <p class="palette-source" id="palette-source"></p>
+          </div>
+          <div class="import-feedback" id="palette-feedback"></div>
+        </div>
       </div>
     </div>
   </main>
 </div>
+
+<canvas id="palette-canvas" style="display:none"></canvas>
 
 <!-- Edit Modal -->
 <div class="modal-backdrop" id="edit-modal" onclick="closeModal(event)">
@@ -868,6 +916,7 @@
       document.getElementById('db-path-display').textContent = e.message;
     }
     loadHistory();
+    loadPaletteSettings();
   }
 
   async function loadHistory() {
@@ -1331,6 +1380,151 @@
     setView('timeline');
     document.getElementById('filter-search').value = tag;
     applyFilters();
+  }
+
+  // ── Palette theming ──────────────────────────────────────────────────────
+
+  function rgbToHsl(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h, s, l = (max + min) / 2;
+    if (max === min) {
+      h = s = 0;
+    } else {
+      const d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      switch (max) {
+        case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+        case g: h = ((b - r) / d + 2) / 6; break;
+        case b: h = ((r - g) / d + 4) / 6; break;
+      }
+      h *= 360;
+    }
+    return { h, s, l };
+  }
+
+  function extractHueFromImage(file) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        const canvas = document.getElementById('palette-canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = canvas.height = 80;
+        ctx.drawImage(img, 0, 0, 80, 80);
+        URL.revokeObjectURL(url);
+
+        const data = ctx.getImageData(0, 0, 80, 80).data;
+        let sinSum = 0, cosSum = 0, totalWeight = 0;
+        let satSum = 0, satCount = 0;
+
+        for (let i = 0; i < data.length; i += 16) {
+          const r = data[i], g = data[i + 1], b = data[i + 2];
+          const { h, s, l } = rgbToHsl(r, g, b);
+          if (s < 0.1 || l < 0.05 || l > 0.95) continue;
+          const weight = s * (1 - Math.abs(l - 0.45) * 1.5);
+          if (weight <= 0) continue;
+          const rad = h * Math.PI / 180;
+          sinSum += Math.sin(rad) * weight;
+          cosSum += Math.cos(rad) * weight;
+          totalWeight += weight;
+          satSum += s; satCount++;
+        }
+
+        if (totalWeight === 0) { resolve(null); return; }
+        const hue = ((Math.atan2(sinSum, cosSum) * 180 / Math.PI) + 360) % 360;
+        const saturation = satCount > 0 ? satSum / satCount : 0.5;
+        resolve({ hue, saturation });
+      };
+      img.onerror = () => reject(new Error('Could not load image'));
+      img.src = url;
+    });
+  }
+
+  function buildPaletteCSS(h, s) {
+    return `
+      :root,[data-theme="light"]{--primary:hsl(${h},${s}%,50%);--primary-h:hsl(${h},${s}%,40%);--primary-bg:hsl(${h},${Math.round(s*.7)}%,93%);--bg:hsl(${h},${Math.round(s*.15)}%,94%);--surface:hsl(${h},${Math.round(s*.08)}%,99%);--border:hsl(${h},${Math.round(s*.15)}%,88%);--stat-hover:hsl(${h},${Math.round(s*.15)}%,97%)}
+      :root[data-theme="dark"]{--primary:hsl(${h},${Math.round(s*.75)}%,65%);--primary-h:hsl(${h},${Math.round(s*.75)}%,55%);--primary-bg:hsl(${h},${Math.round(s*.3)}%,18%);--bg:hsl(${h},${Math.round(s*.2)}%,8%);--surface:hsl(${h},${Math.round(s*.15)}%,13%);--border:hsl(${h},${Math.round(s*.15)}%,21%);--stat-hover:hsl(${h},${Math.round(s*.2)}%,17%)}
+      @media(prefers-color-scheme:dark){:root:not([data-theme="light"]):not([data-theme="dark"]){--primary:hsl(${h},${Math.round(s*.75)}%,65%);--primary-h:hsl(${h},${Math.round(s*.75)}%,55%);--primary-bg:hsl(${h},${Math.round(s*.3)}%,18%);--bg:hsl(${h},${Math.round(s*.2)}%,8%);--surface:hsl(${h},${Math.round(s*.15)}%,13%);--border:hsl(${h},${Math.round(s*.15)}%,21%);--stat-hover:hsl(${h},${Math.round(s*.2)}%,17%)}}`;
+  }
+
+  function applyPalette(hue, saturation) {
+    const h = Math.round(hue);
+    const s = Math.round(Math.min(Math.max(saturation * 100, 30), 75));
+    let style = document.getElementById('palette-style');
+    if (!style) {
+      style = document.createElement('style');
+      style.id = 'palette-style';
+      document.head.appendChild(style);
+    }
+    style.textContent = buildPaletteCSS(h, s);
+    localStorage.setItem('paletteHue', hue);
+    localStorage.setItem('paletteSat', saturation);
+  }
+
+  function clearPalette() {
+    const style = document.getElementById('palette-style');
+    if (style) style.textContent = '';
+    localStorage.removeItem('paletteHue');
+    localStorage.removeItem('paletteSat');
+    document.getElementById('clear-palette-btn').style.display = 'none';
+    document.getElementById('palette-preview-wrap').style.display = 'none';
+    const fb = document.getElementById('palette-feedback');
+    fb.textContent = '✓ Palette cleared — default colours restored.';
+    fb.className = 'import-feedback ok';
+    setTimeout(() => { fb.style.display = 'none'; }, 3000);
+  }
+
+  function renderPaletteSwatches(hue, saturation, filename) {
+    const h = Math.round(hue);
+    const s = Math.round(Math.min(Math.max(saturation * 100, 30), 75));
+    const swatches = [
+      { color: `hsl(${h},${s}%,50%)`,              title: 'Primary (light)' },
+      { color: `hsl(${h},${Math.round(s*.75)}%,65%)`, title: 'Primary (dark)' },
+      { color: `hsl(${h},${Math.round(s*.7)}%,93%)`,  title: 'Accent bg' },
+      { color: `hsl(${h},${Math.round(s*.15)}%,94%)`,  title: 'Background (light)' },
+      { color: `hsl(${h},${Math.round(s*.2)}%,8%)`,   title: 'Background (dark)' },
+    ];
+    document.getElementById('palette-swatches').innerHTML =
+      swatches.map(sw => `<span class="swatch" style="background:${sw.color}" title="${sw.title}"></span>`).join('');
+    if (filename) document.getElementById('palette-source').textContent = filename;
+    document.getElementById('palette-preview-wrap').style.display = '';
+    document.getElementById('clear-palette-btn').style.display = '';
+  }
+
+  async function handlePaletteUpload(input) {
+    const file = input.files[0];
+    if (!file) return;
+    input.value = '';
+
+    const fb = document.getElementById('palette-feedback');
+    fb.textContent = 'Extracting palette…';
+    fb.className = 'import-feedback';
+    fb.style.display = 'block';
+
+    try {
+      const result = await extractHueFromImage(file);
+      if (!result) {
+        fb.textContent = '✕ No distinct colours found — try a more colourful image.';
+        fb.className = 'import-feedback err';
+        return;
+      }
+      const { hue, saturation } = result;
+      applyPalette(hue, saturation);
+      renderPaletteSwatches(hue, saturation, file.name);
+      fb.textContent = `✓ Palette applied from "${file.name}" — hue ${Math.round(hue)}°`;
+      fb.className = 'import-feedback ok';
+      setTimeout(() => { fb.style.display = 'none'; }, 4000);
+    } catch (e) {
+      fb.textContent = '✕ ' + e.message;
+      fb.className = 'import-feedback err';
+    }
+  }
+
+  function loadPaletteSettings() {
+    const hue = localStorage.getItem('paletteHue');
+    const sat = localStorage.getItem('paletteSat');
+    if (hue && sat) renderPaletteSwatches(parseFloat(hue), parseFloat(sat));
   }
 
   // ── Theme ────────────────────────────────────────────────────────────────
