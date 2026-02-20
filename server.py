@@ -22,6 +22,7 @@ from starlette.background import BackgroundTask
 import uvicorn
 from fastapi import FastAPI, Query, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from mcp.server.fastmcp import FastMCP
 
@@ -427,6 +428,7 @@ def execute_merge(records: list[dict], output_path: Optional[str] = None) -> dic
 # Web Dashboard (FastAPI)
 # ---------------------------------------------------------------------------
 web_app = FastAPI(title="Daily Accomplishments Dashboard")
+web_app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "web")), name="static")
 
 
 @web_app.get("/", response_class=HTMLResponse)
