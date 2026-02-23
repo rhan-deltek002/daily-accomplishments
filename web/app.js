@@ -17,6 +17,10 @@ let currentView = 'timeline';
 let currentPeriod = 'this_year';
 let allData = [];
 let debounceTimer = null;
+let currentPage = 1;
+const PAGE_SIZE = 7;
+let monthShown = {};
+const MONTH_PAGE_SIZE = 5;
 
 // ── Fetch stats ────────────────────────────────────────────────────────
 async function loadStats() {
@@ -45,6 +49,8 @@ async function loadData(params = {}) {
     const url = '/api/accomplishments' + (qs ? '?' + qs : '');
     const r = await fetch(url);
     allData = await r.json();
+    currentPage = 1;
+    monthShown = {};
     renderView();
   } catch (e) {
     document.getElementById('content').innerHTML =
@@ -57,6 +63,7 @@ function renderView() {
   document.getElementById('result-info').textContent =
     allData.length === 0 ? '' : `${allData.length} accomplishment${allData.length !== 1 ? 's' : ''}`;
 
+  if (currentView !== 'timeline') document.getElementById('pagination').innerHTML = '';
   if (currentView === 'timeline') renderTimeline();
   else if (currentView === 'annual') renderAnnual();
   else if (currentView === 'tags') renderTags();
@@ -65,6 +72,7 @@ function renderView() {
 function renderTimeline() {
   if (allData.length === 0) {
     document.getElementById('content').innerHTML = emptyState();
+    document.getElementById('pagination').innerHTML = '';
     return;
   }
 
@@ -75,23 +83,59 @@ function renderTimeline() {
     groups[item.date].push(item);
   }
 
-  const html = Object.entries(groups)
-    .sort(([a], [b]) => b.localeCompare(a))
-    .map(([date, items]) => {
-      const d = new Date(date + 'T12:00:00');
-      const label = formatDateLabel(d);
-      return `
-        <div class="day-group">
-          <div class="day-header">
-            <span class="day-label">${label}</span>
-            <span class="day-count">${items.length}</span>
-            <div class="day-line"></div>
-          </div>
-          ${items.map(renderCard).join('')}
-        </div>`;
-    }).join('');
+  const sortedGroups = Object.entries(groups).sort(([a], [b]) => b.localeCompare(a));
+  const totalPages = Math.ceil(sortedGroups.length / PAGE_SIZE);
+  currentPage = Math.max(1, Math.min(currentPage, totalPages));
+
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const pageGroups = sortedGroups.slice(start, start + PAGE_SIZE);
+
+  const html = pageGroups.map(([date, items]) => {
+    const d = new Date(date + 'T12:00:00');
+    const label = formatDateLabel(d);
+    return `
+      <div class="day-group">
+        <div class="day-header">
+          <span class="day-label">${label}</span>
+          <span class="day-count">${items.length}</span>
+          <div class="day-line"></div>
+        </div>
+        ${items.map(renderCard).join('')}
+      </div>`;
+  }).join('');
 
   document.getElementById('content').innerHTML = html;
+  renderPagination(totalPages);
+}
+
+function renderPagination(totalPages) {
+  const el = document.getElementById('pagination');
+  if (totalPages <= 1) { el.innerHTML = ''; return; }
+
+  // Build the set of page numbers to show: first, last, and a window around currentPage
+  const pages = new Set([1, totalPages]);
+  for (let i = Math.max(1, currentPage - 2); i <= Math.min(totalPages, currentPage + 2); i++) pages.add(i);
+  const pageList = [...pages].sort((a, b) => a - b);
+
+  let btns = '';
+  let prev = null;
+  for (const p of pageList) {
+    if (prev !== null && p - prev > 1) btns += `<span class="page-ellipsis">…</span>`;
+    btns += `<button class="page-btn${p === currentPage ? ' active' : ''}" onclick="goToPage(${p})">${p}</button>`;
+    prev = p;
+  }
+
+  el.innerHTML = `<div class="pagination">
+    <button class="page-btn" onclick="goToPage(${currentPage - 1})" ${currentPage <= 1 ? 'disabled' : ''}>‹ Prev</button>
+    ${btns}
+    <button class="page-btn" onclick="goToPage(${currentPage + 1})" ${currentPage >= totalPages ? 'disabled' : ''}>Next ›</button>
+  </div>`;
+}
+
+function goToPage(n) {
+  currentPage = n;
+  renderTimeline();
+  document.getElementById('content').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function renderAnnual() {
@@ -114,13 +158,9 @@ function renderAnnual() {
       const [year, mo] = month.split('-');
       const label = `${MONTH_NAMES[parseInt(mo, 10) - 1]} ${year}`;
       const high = items.filter(i => i.impact_level === 'high').length;
-      const cats = [...new Set(items.map(i => i.category))];
-      const catBadges = cats.map(c =>
-        `<span class="cat-badge" style="background:${CAT_COLORS[c]||'#94a3b8'}">${c}</span>`
-      ).join('');
 
       return `
-        <div class="month-section">
+        <div class="month-section" data-month="${month}">
           <div class="month-header" onclick="toggleMonth(this)">
             <span class="month-name">📅 ${label}</span>
             <div class="month-stats">
@@ -130,13 +170,42 @@ function renderAnnual() {
             <span style="color:var(--muted);font-size:0.8rem">▼</span>
           </div>
           <div class="month-cards">
-            <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.75rem">${catBadges}</div>
-            ${items.map(renderCard).join('')}
+            ${renderMonthPage(month, items)}
           </div>
         </div>`;
     }).join('');
 
   document.getElementById('content').innerHTML = `<div class="monthly-grid">${html}</div>`;
+}
+
+function renderMonthPage(month, items) {
+  const cats = [...new Set(items.map(i => i.category))];
+  const catBadges = cats.map(c =>
+    `<span class="cat-badge" style="background:${CAT_COLORS[c]||'#94a3b8'}">${c}</span>`
+  ).join('');
+
+  const shown = monthShown[month] || MONTH_PAGE_SIZE;
+  const visibleItems = items.slice(0, shown);
+  const remaining = items.length - shown;
+
+  const showMore = remaining > 0 ? `
+    <button class="show-more-btn" onclick="showMoreMonth('${month}')">
+      Show ${Math.min(remaining, MONTH_PAGE_SIZE)} more
+      <span class="show-more-count">(${remaining} remaining)</span>
+    </button>` : '';
+
+  return `
+    <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.75rem">${catBadges}</div>
+    ${visibleItems.map(renderCard).join('')}
+    ${showMore}`;
+}
+
+function showMoreMonth(month) {
+  monthShown[month] = (monthShown[month] || MONTH_PAGE_SIZE) + MONTH_PAGE_SIZE;
+  const section = document.querySelector(`[data-month="${month}"]`);
+  if (!section) return;
+  const items = allData.filter(i => i.date.slice(0, 7) === month);
+  section.querySelector('.month-cards').innerHTML = renderMonthPage(month, items);
 }
 
 function contextClass(ctx) {
@@ -182,6 +251,7 @@ function emptyState() {
 
 // ── Controls ────────────────────────────────────────────────────────────
 function setView(v) {
+  if (v !== currentView) currentPage = 1;
   currentView = v;
   const isSettings = v === 'settings';
   const isTags = v === 'tags';
