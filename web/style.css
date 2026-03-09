@@ -145,6 +145,8 @@ header .header-btn.active { border-color: var(--primary); color: var(--primary);
 
 /* ── Tag visualizer ── */
 .tag-viz { display: flex; flex-direction: column; gap: 2rem; }
+.tag-charts-row { display: flex; gap: 1.5rem; align-items: stretch; flex-wrap: wrap; }
+.tag-charts-row > * { flex: 1; min-width: 260px; }
 
 /* Cloud */
 .tag-cloud-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.5rem 1.75rem; }
@@ -425,3 +427,18 @@ main {
 .btn-cancel:hover { border-color: var(--primary); color: var(--primary); }
 .btn-save { background: var(--primary); border: none; color: white; font-weight: 600; }
 .btn-save:hover { background: var(--primary-h); }
+
+/* ── Pie chart ── */
+.tag-pie-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.5rem 1.75rem; display: flex; flex-direction: column; }
+.tag-pie-wrap h3 { font-size: 0.78rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin-bottom: 1.25rem; }
+#tag-pie { flex: 1; display: flex; align-items: center; justify-content: center; }
+.pie-layout { display: flex; flex-direction: column; align-items: center; gap: 1.25rem; width: 100%; }
+.pie-svg { width: min(80%, 100%); height: auto; overflow: visible; }
+.pie-c1 { font-size: 22px; font-weight: 700; fill: var(--text); font-family: inherit; transition: font-size 0.1s; }
+.pie-c2 { font-size: 9.5px; fill: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; font-family: inherit; }
+.pie-legend { display: flex; flex-wrap: wrap; gap: 0.3rem 1rem; justify-content: center; width: 100%; }
+.pie-leg { display: flex; align-items: center; gap: 0.45rem; transition: opacity 0.12s; border-radius: 4px; padding: 0.1rem 0.3rem; }
+.pie-leg:hover { background: var(--bg); }
+.pie-dot { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+.pie-leg-tag { font-size: 0.78rem; color: var(--text); white-space: nowrap; }
+.pie-leg-pct { font-size: 0.75rem; color: var(--muted); font-weight: 600; }
