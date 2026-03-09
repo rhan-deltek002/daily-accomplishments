@@ -684,6 +684,7 @@ function tagColor(tag) {
 async function renderTags() {
   document.getElementById('tag-cloud').innerHTML = '<span style="color:var(--muted);font-size:0.85rem">Loading…</span>';
   document.getElementById('tag-chart').innerHTML = '';
+  document.getElementById('tag-pie').innerHTML = '';
 
   // Fetch all accomplishments (respect current period filter)
   let data = allData;
@@ -708,14 +709,15 @@ async function renderTags() {
   if (!sorted.length) {
     document.getElementById('tag-cloud').innerHTML =
       '<span style="color:var(--muted);font-size:0.85rem">No tags found in the current view.</span>';
+    document.getElementById('tag-pie').innerHTML = '';
     return;
   }
 
   const max = sorted[0][1];
   const min = sorted[sorted.length - 1][1];
 
-  // Cloud — font size between 0.85rem and 2.4rem, each tag colored
-  const cloudHtml = sorted.map(([tag, count]) => {
+  // Cloud — alphabetical order, font size between 0.85rem and 2.4rem by frequency
+  const cloudHtml = [...sorted].sort(([a], [b]) => a.localeCompare(b)).map(([tag, count]) => {
     const ratio = max === min ? 1 : (count - min) / (max - min);
     const size = (0.85 + ratio * 1.55).toFixed(2);
     const { bg, text } = tagColor(tag);
@@ -741,12 +743,100 @@ async function renderTags() {
       </div>`;
   }).join('');
   document.getElementById('tag-chart').innerHTML = barHtml;
+  renderPieChart(sorted);
 }
 
 function filterByTag(tag) {
   setView('timeline');
   document.getElementById('filter-search').value = tag;
   applyFilters();
+}
+
+function renderPieChart(sorted) {
+  const container = document.getElementById('tag-pie');
+  if (!container) return;
+
+  const MAX = 10;
+  const top = sorted.slice(0, MAX);
+  const rest = sorted.slice(MAX);
+  const restCount = rest.reduce((s, [, c]) => s + c, 0);
+
+  const entries = [...top];
+  if (restCount > 0) entries.push([`other tags (${rest.length})`, restCount]);
+
+  const total = entries.reduce((s, [, c]) => s + c, 0);
+  if (!total) { container.innerHTML = ''; return; }
+
+  const cx = 100, cy = 100, R = 80, ri = 44;
+  let a = -Math.PI / 2;
+
+  function pt(angle, rad) { return [cx + rad * Math.cos(angle), cy + rad * Math.sin(angle)]; }
+
+  const slices = entries.map(([tag, count]) => {
+    const sa = a;
+    a += (count / total) * 2 * Math.PI;
+    const ea = a;
+    const large = ea - sa > Math.PI ? 1 : 0;
+    const [x1, y1] = pt(sa, R), [x2, y2] = pt(ea, R);
+    const [x3, y3] = pt(ea, ri), [x4, y4] = pt(sa, ri);
+    const d = `M${x1},${y1}A${R},${R},0,${large},1,${x2},${y2}L${x3},${y3}A${ri},${ri},0,${large},0,${x4},${y4}Z`;
+    const isOther = tag.startsWith('other tags');
+    const color = isOther ? (isDarkMode() ? '#4b5563' : '#9ca3af') : tagColor(tag).text;
+    const pct = ((count / total) * 100).toFixed(1);
+    return { tag, count, pct, d, color, isOther };
+  });
+
+  window._pieSlices = slices;
+  window._pieTotal = total;
+
+  const paths = slices.map((s, i) =>
+    `<path d="${s.d}" fill="${s.color}" opacity="0.85" class="pie-slice"
+      onmouseenter="pieOver(${i})" onmouseleave="pieOut()"
+      onclick="${s.isOther ? '' : `filterByTag('${esc(s.tag)}')`}"
+      style="cursor:${s.isOther ? 'default' : 'pointer'};transition:opacity .12s"/>`
+  ).join('');
+
+  const legendRows = slices.map((s, i) =>
+    `<div class="pie-leg" onmouseenter="pieOver(${i})" onmouseleave="pieOut()"
+       onclick="${s.isOther ? '' : `filterByTag('${esc(s.tag)}')`}"
+       style="cursor:${s.isOther ? 'default' : 'pointer'}">
+      <span class="pie-dot" style="background:${s.color}"></span>
+      <span class="pie-leg-tag">${esc(s.tag)}</span>
+      <span class="pie-leg-pct">${s.pct}%</span>
+    </div>`
+  ).join('');
+
+  container.innerHTML = `
+    <div class="pie-layout">
+      <svg viewBox="0 0 200 200" class="pie-svg">
+        ${paths}
+        <circle cx="${cx}" cy="${cy}" r="${ri - 1}" fill="var(--surface)"/>
+        <text id="pie-c1" x="${cx}" y="${cy - 5}" text-anchor="middle" class="pie-c1">${total}</text>
+        <text id="pie-c2" x="${cx}" y="${cy + 14}" text-anchor="middle" class="pie-c2">total uses</text>
+      </svg>
+      <div class="pie-legend">${legendRows}</div>
+    </div>`;
+}
+
+function pieOver(idx) {
+  const s = window._pieSlices?.[idx];
+  if (!s) return;
+  document.querySelectorAll('.pie-slice').forEach((el, i) => { el.style.opacity = i === idx ? '1' : '0.3'; });
+  document.querySelectorAll('.pie-leg').forEach((el, i) => { el.style.opacity = i === idx ? '1' : '0.4'; });
+  const c1 = document.getElementById('pie-c1');
+  const c2 = document.getElementById('pie-c2');
+  if (c1) c1.textContent = s.pct + '%';
+  if (c2) c2.textContent = s.isOther ? 'other tags' : esc(s.tag);
+}
+
+function pieOut() {
+  if (!window._pieSlices) return;
+  document.querySelectorAll('.pie-slice').forEach(el => { el.style.opacity = '0.85'; });
+  document.querySelectorAll('.pie-leg').forEach(el => { el.style.opacity = '1'; });
+  const c1 = document.getElementById('pie-c1');
+  const c2 = document.getElementById('pie-c2');
+  if (c1) c1.textContent = window._pieTotal;
+  if (c2) c2.textContent = 'total uses';
 }
 
 // ── Palette theming ──────────────────────────────────────────────────────
