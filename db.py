@@ -161,7 +161,7 @@ def log_accomplishment(
 
     created_ts = int(time.time())
     if date_str is None:
-        date_ts = _date_to_ts(date.today().strftime("%Y-%m-%d"))
+        date_ts = created_ts
     else:
         date_ts = _parse_date(date_str)
 
