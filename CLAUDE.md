@@ -52,6 +52,8 @@ Both scripts run `pip install` then call `claude mcp add daily-accomplishments -
 
 `log_accomplishment`, `get_accomplishments`, `search_accomplishments`, `get_summary`, `update_accomplishment`, `delete_accomplishment`, `get_merge_candidates`, `execute_merge`
 
+All date parameters in MCP tools use **Unix timestamps** (seconds since epoch). To get the current timestamp: `date +%s`. The web API still accepts YYYY-MM-DD query strings for backward compatibility.
+
 Valid values: categories — `feature bugfix learning review design documentation refactor infrastructure meeting other`; impact — `low medium high`; context — free-form string, common values `work side_project personal`; project — free-form string (e.g. `daily-accomplishments`, `my-app`).
 
 **AI-assisted merge workflow** (`get_merge_candidates` → `execute_merge`):

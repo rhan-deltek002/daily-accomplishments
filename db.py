@@ -48,6 +48,43 @@ def _is_string_date(val) -> bool:
     return isinstance(val, str) and len(val) >= 10 and val[4:5] == '-'
 
 
+def _parse_date(val) -> int:
+    """Accept a Unix timestamp (int) or YYYY-MM-DD string, return a timestamp."""
+    if isinstance(val, int):
+        return val
+    if isinstance(val, str):
+        # Could be a stringified int or a YYYY-MM-DD date
+        try:
+            return int(val)
+        except ValueError:
+            return _date_to_ts(val)
+    raise ValueError(f"Cannot parse date: {val!r}")
+
+
+def _parse_date_range_start(val) -> int:
+    """Accept int timestamp or YYYY-MM-DD string, return start-of-day timestamp."""
+    if isinstance(val, int):
+        return val
+    if isinstance(val, str):
+        try:
+            return int(val)
+        except ValueError:
+            return _date_range_start(val)
+    raise ValueError(f"Cannot parse date: {val!r}")
+
+
+def _parse_date_range_end(val) -> int:
+    """Accept int timestamp or YYYY-MM-DD string, return end-of-day timestamp."""
+    if isinstance(val, int):
+        return val
+    if isinstance(val, str):
+        try:
+            return int(val)
+        except ValueError:
+            return _date_range_end(val)
+    raise ValueError(f"Cannot parse date: {val!r}")
+
+
 def get_conn(db_path: str) -> sqlite3.Connection:
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
@@ -115,17 +152,18 @@ def log_accomplishment(
     category: str,
     impact_level: str = "medium",
     tags: Optional[list] = None,
-    date_str: Optional[str] = None,
+    date_str=None,
     context: str = "work",
     project: Optional[str] = None,
 ) -> dict:
     if tags is None:
         tags = []
-    if date_str is None:
-        date_str = date.today().strftime("%Y-%m-%d")
 
-    date_ts = _date_to_ts(date_str)
     created_ts = int(time.time())
+    if date_str is None:
+        date_ts = _date_to_ts(date.today().strftime("%Y-%m-%d"))
+    else:
+        date_ts = _parse_date(date_str)
 
     with get_conn(db_path) as conn:
         cursor = conn.execute(
@@ -156,10 +194,10 @@ def get_accomplishments(
 
     if date_from:
         query += " AND date >= ?"
-        params.append(_date_range_start(date_from))
+        params.append(_parse_date_range_start(date_from))
     if date_to:
         query += " AND date <= ?"
-        params.append(_date_range_end(date_to))
+        params.append(_parse_date_range_end(date_to))
     if category:
         query += " AND category = ?"
         params.append(category)
@@ -287,7 +325,7 @@ def update_accomplishment(
     if tags is not None:
         fields.append("tags = ?"); params.append(json.dumps(tags))
     if date_str is not None:
-        fields.append("date = ?"); params.append(_date_to_ts(date_str))
+        fields.append("date = ?"); params.append(_parse_date(date_str))
     if context is not None:
         fields.append("context = ?"); params.append(context)
     if project is not None:

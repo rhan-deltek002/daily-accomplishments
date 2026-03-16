@@ -146,7 +146,11 @@ mcp = FastMCP(
     instructions=(
         "Use these tools to record and review the user's daily accomplishments. "
 
-        "BEFORE logging at the end of a session: call get_accomplishments with today's date "
+        "All date parameters use Unix timestamps (seconds since epoch). "
+        "To get the current timestamp, run: date +%s in bash. "
+        "To get a specific date's timestamp: date -d 'YYYY-MM-DD' +%s. "
+
+        "BEFORE logging at the end of a session: call get_accomplishments with today's timestamp "
         "to see what is already recorded. If related accomplishments exist, update them with "
         "update_accomplishment rather than creating duplicates. Consolidate related work into "
         "a single entry — do not log one entry per file changed, bug fixed, or tool added. "
@@ -196,7 +200,7 @@ def log_accomplishment(
     category: str,
     impact_level: str = "medium",
     tags: list[str] = [],
-    date: Optional[str] = None,
+    date: Optional[int] = None,
     context: str = "work",
     project: Optional[str] = None,
 ) -> dict:
@@ -213,7 +217,8 @@ def log_accomplishment(
                   documentation, refactor, infrastructure, meeting, other
         impact_level: Significance — low | medium | high
         tags: Optional list of keywords (e.g. ["python", "api", "auth"])
-        date: Date in YYYY-MM-DD format (defaults to today)
+        date: Unix timestamp (seconds since epoch). Defaults to now.
+              Use int(time.time()) to get the current timestamp.
         context: Where this work belongs — e.g. "work", "side_project",
                  "personal", or any custom label. Always defaults to "work"
                  unless the user explicitly says otherwise.
@@ -233,8 +238,8 @@ def log_accomplishment(
 
 @mcp.tool()
 def get_accomplishments(
-    date_from: Optional[str] = None,
-    date_to: Optional[str] = None,
+    date_from: Optional[int] = None,
+    date_to: Optional[int] = None,
     category: Optional[str] = None,
     impact_level: Optional[str] = None,
     context: Optional[str] = None,
@@ -244,8 +249,8 @@ def get_accomplishments(
     Retrieve logged accomplishments with optional filters.
 
     Args:
-        date_from: Start date YYYY-MM-DD (inclusive)
-        date_to: End date YYYY-MM-DD (inclusive)
+        date_from: Start of range as Unix timestamp (seconds since epoch, inclusive)
+        date_to: End of range as Unix timestamp (seconds since epoch, inclusive)
         category: Filter by category
         impact_level: Filter by impact (low | medium | high)
         context: Filter by context (e.g. "work", "side_project", "personal")
@@ -268,8 +273,8 @@ def search_accomplishments(query: str) -> list:
 @mcp.tool()
 def get_summary(
     period: str = "this_year",
-    date_from: Optional[str] = None,
-    date_to: Optional[str] = None,
+    date_from: Optional[int] = None,
+    date_to: Optional[int] = None,
     include_records: bool = False,
     project: Optional[str] = None,
 ) -> dict:
@@ -285,9 +290,8 @@ def get_summary(
     Args:
         period: One of: today, this_week, this_month, this_year,
                 last_year, all_time
-        date_from: Start date YYYY-MM-DD (inclusive). Use for custom ranges
-                   such as a quarter (e.g. "2026-01-01") or fiscal period.
-        date_to: End date YYYY-MM-DD (inclusive).
+        date_from: Start of range as Unix timestamp (seconds since epoch, inclusive).
+        date_to: End of range as Unix timestamp (seconds since epoch, inclusive).
         include_records: Whether to include the full list of accomplishment
                          records in the response. Defaults to False to keep
                          token usage low. Set to True when you need the full
@@ -322,7 +326,7 @@ def update_accomplishment(
     category: Optional[str] = None,
     impact_level: Optional[str] = None,
     tags: Optional[list[str]] = None,
-    date: Optional[str] = None,
+    date: Optional[int] = None,
     context: Optional[str] = None,
     project: Optional[str] = None,
 ) -> dict:
@@ -337,7 +341,7 @@ def update_accomplishment(
         category: New category
         impact_level: New impact level (low | medium | high)
         tags: New tags list (replaces existing tags)
-        date: New date in YYYY-MM-DD format
+        date: New date as Unix timestamp (seconds since epoch)
         context: New context (e.g. "work", "side_project", "personal")
         project: New project name
     """
