@@ -1,7 +1,51 @@
 import sqlite3
 import json
-from datetime import date, timedelta
+import time
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
+
+
+# ---------------------------------------------------------------------------
+# Timestamp helpers
+# ---------------------------------------------------------------------------
+def _date_to_ts(date_str: str) -> int:
+    """Convert YYYY-MM-DD to Unix timestamp at noon UTC (avoids TZ boundary issues)."""
+    d = datetime.strptime(date_str, "%Y-%m-%d").replace(hour=12, tzinfo=timezone.utc)
+    return int(d.timestamp())
+
+
+def _datetime_str_to_ts(dt_str: str) -> int:
+    """Convert 'YYYY-MM-DD HH:MM:SS' to Unix timestamp (treated as UTC)."""
+    try:
+        d = datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+        return int(d.timestamp())
+    except ValueError:
+        d = datetime.strptime(dt_str[:10], "%Y-%m-%d").replace(hour=12, tzinfo=timezone.utc)
+        return int(d.timestamp())
+
+
+def _date_range_start(date_str: str) -> int:
+    """Start-of-day (midnight UTC) timestamp for range filtering."""
+    d = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    return int(d.timestamp())
+
+
+def _date_range_end(date_str: str) -> int:
+    """End-of-day (23:59:59 UTC) timestamp for range filtering."""
+    d = datetime.strptime(date_str, "%Y-%m-%d").replace(
+        hour=23, minute=59, second=59, tzinfo=timezone.utc
+    )
+    return int(d.timestamp())
+
+
+def _ts_to_month(ts) -> str:
+    """Extract YYYY-MM from a Unix timestamp."""
+    return datetime.fromtimestamp(int(ts), tz=timezone.utc).strftime("%Y-%m")
+
+
+def _is_string_date(val) -> bool:
+    """Check if a value looks like a YYYY-MM-DD date string."""
+    return isinstance(val, str) and len(val) >= 10 and val[4:5] == '-'
 
 
 def get_conn(db_path: str) -> sqlite3.Connection:
@@ -21,8 +65,8 @@ def init_db(db_path: str) -> None:
                 impact_level TEXT    NOT NULL DEFAULT 'medium',
                 tags         TEXT    DEFAULT '[]',
                 context      TEXT    NOT NULL DEFAULT 'work',
-                date         DATE    NOT NULL DEFAULT (date('now')),
-                created_at   DATETIME NOT NULL DEFAULT (datetime('now'))
+                date         INTEGER NOT NULL DEFAULT (cast(strftime('%s','now') as integer)),
+                created_at   INTEGER NOT NULL DEFAULT (cast(strftime('%s','now') as integer))
             )
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_date ON accomplishments(date)")
@@ -37,6 +81,21 @@ def init_db(db_path: str) -> None:
             conn.execute("ALTER TABLE accomplishments ADD COLUMN project TEXT")
         except sqlite3.OperationalError:
             pass  # Column already exists
+        # Migration: convert string dates to Unix timestamps
+        try:
+            sample = conn.execute("SELECT date FROM accomplishments LIMIT 1").fetchone()
+            if sample and _is_string_date(sample[0]):
+                rows = conn.execute("SELECT id, date, created_at FROM accomplishments").fetchall()
+                for row in rows:
+                    rid, d, ca = row[0], row[1], row[2]
+                    new_date = _date_to_ts(d) if d and _is_string_date(d) else d
+                    new_ca = _datetime_str_to_ts(ca) if ca and _is_string_date(ca) else ca
+                    conn.execute(
+                        "UPDATE accomplishments SET date = ?, created_at = ? WHERE id = ?",
+                        (new_date, new_ca, rid),
+                    )
+        except Exception:
+            pass  # Empty table or already migrated
         conn.commit()
 
 
@@ -65,13 +124,16 @@ def log_accomplishment(
     if date_str is None:
         date_str = date.today().strftime("%Y-%m-%d")
 
+    date_ts = _date_to_ts(date_str)
+    created_ts = int(time.time())
+
     with get_conn(db_path) as conn:
         cursor = conn.execute(
             """
-            INSERT INTO accomplishments (title, description, category, impact_level, tags, date, context, project)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO accomplishments (title, description, category, impact_level, tags, date, context, project, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (title, description, category, impact_level, json.dumps(tags), date_str, context, project),
+            (title, description, category, impact_level, json.dumps(tags), date_ts, context, project, created_ts),
         )
         conn.commit()
         row = conn.execute(
@@ -94,10 +156,10 @@ def get_accomplishments(
 
     if date_from:
         query += " AND date >= ?"
-        params.append(date_from)
+        params.append(_date_range_start(date_from))
     if date_to:
         query += " AND date <= ?"
-        params.append(date_to)
+        params.append(_date_range_end(date_to))
     if category:
         query += " AND category = ?"
         params.append(category)
@@ -180,7 +242,7 @@ def get_summary(
         by_category[cat] = by_category.get(cat, 0) + 1
         lvl = item["impact_level"]
         by_impact[lvl] = by_impact.get(lvl, 0) + 1
-        month = item["date"][:7]
+        month = _ts_to_month(item["date"])
         by_month[month] = by_month.get(month, 0) + 1
         proj = item.get("project")
         if proj:
@@ -225,7 +287,7 @@ def update_accomplishment(
     if tags is not None:
         fields.append("tags = ?"); params.append(json.dumps(tags))
     if date_str is not None:
-        fields.append("date = ?"); params.append(date_str)
+        fields.append("date = ?"); params.append(_date_to_ts(date_str))
     if context is not None:
         fields.append("context = ?"); params.append(context)
     if project is not None:
@@ -385,9 +447,14 @@ def delete_accomplishment(db_path: str, id: int) -> bool:
 
 def get_stats(db_path: str) -> dict:
     today = date.today()
-    week_start = (today - timedelta(days=today.weekday())).strftime("%Y-%m-%d")
-    year_start = today.replace(month=1, day=1).strftime("%Y-%m-%d")
     today_str = today.strftime("%Y-%m-%d")
+    week_start_str = (today - timedelta(days=today.weekday())).strftime("%Y-%m-%d")
+    year_start_str = today.replace(month=1, day=1).strftime("%Y-%m-%d")
+
+    today_start = _date_range_start(today_str)
+    today_end = _date_range_end(today_str)
+    week_start_ts = _date_range_start(week_start_str)
+    year_start_ts = _date_range_start(year_start_str)
 
     with get_conn(db_path) as conn:
         total = conn.execute("SELECT COUNT(*) FROM accomplishments").fetchone()[0]
@@ -395,13 +462,14 @@ def get_stats(db_path: str) -> dict:
             "SELECT COUNT(*) FROM accomplishments WHERE impact_level = 'high'"
         ).fetchone()[0]
         this_week = conn.execute(
-            "SELECT COUNT(*) FROM accomplishments WHERE date >= ?", (week_start,)
+            "SELECT COUNT(*) FROM accomplishments WHERE date >= ?", (week_start_ts,)
         ).fetchone()[0]
         this_year = conn.execute(
-            "SELECT COUNT(*) FROM accomplishments WHERE date >= ?", (year_start,)
+            "SELECT COUNT(*) FROM accomplishments WHERE date >= ?", (year_start_ts,)
         ).fetchone()[0]
         today_count = conn.execute(
-            "SELECT COUNT(*) FROM accomplishments WHERE date = ?", (today_str,)
+            "SELECT COUNT(*) FROM accomplishments WHERE date >= ? AND date <= ?",
+            (today_start, today_end),
         ).fetchone()[0]
 
     return {

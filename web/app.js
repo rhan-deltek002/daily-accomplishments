@@ -13,6 +13,17 @@ const CAT_COLORS = {
 
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
+// ── Timestamp helpers ────────────────────────────────────────────────────
+function tsToDate(ts) { return new Date(ts * 1000); }
+function tsToDateKey(ts) {
+  const d = tsToDate(ts);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function tsToMonthKey(ts) {
+  const d = tsToDate(ts);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+}
+
 let currentView = 'timeline';
 let currentPeriod = 'this_year';
 let allData = [];
@@ -76,11 +87,12 @@ function renderTimeline() {
     return;
   }
 
-  // Group by date
+  // Group by date (local TZ)
   const groups = {};
   for (const item of allData) {
-    if (!groups[item.date]) groups[item.date] = [];
-    groups[item.date].push(item);
+    const key = tsToDateKey(item.date);
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(item);
   }
 
   const sortedGroups = Object.entries(groups).sort(([a], [b]) => b.localeCompare(a));
@@ -144,10 +156,10 @@ function renderAnnual() {
     return;
   }
 
-  // Group by month
+  // Group by month (local TZ)
   const months = {};
   for (const item of allData) {
-    const month = item.date.slice(0, 7);
+    const month = tsToMonthKey(item.date);
     if (!months[month]) months[month] = [];
     months[month].push(item);
   }
@@ -204,7 +216,7 @@ function showMoreMonth(month) {
   monthShown[month] = (monthShown[month] || MONTH_PAGE_SIZE) + MONTH_PAGE_SIZE;
   const section = document.querySelector(`[data-month="${month}"]`);
   if (!section) return;
-  const items = allData.filter(i => i.date.slice(0, 7) === month);
+  const items = allData.filter(i => tsToMonthKey(i.date) === month);
   section.querySelector('.month-cards').innerHTML = renderMonthPage(month, items);
 }
 
@@ -216,7 +228,7 @@ function contextClass(ctx) {
 function renderCard(item) {
   const catColor = CAT_COLORS[item.category] || '#94a3b8';
   const tags = (item.tags || []).map(t => `<span class="tag-badge">${esc(t)}</span>`).join('');
-  const time = item.created_at ? item.created_at.slice(11, 16) : '';
+  const time = item.created_at ? tsToDate(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
   const ctx = item.context || 'work';
   const ctxLabel = ctx.replace(/_/g, ' ');
   const proj = item.project;
@@ -585,7 +597,7 @@ function openEdit(id) {
   document.getElementById('edit-description').value = item.description;
   document.getElementById('edit-category').value    = item.category;
   document.getElementById('edit-impact').value      = item.impact_level;
-  document.getElementById('edit-date').value        = item.date;
+  document.getElementById('edit-date').value        = tsToDateKey(item.date);
   document.getElementById('edit-context').value     = item.context || 'work';
   document.getElementById('edit-project').value     = item.project || '';
   document.getElementById('edit-tags').value        = (item.tags || []).join(', ');
