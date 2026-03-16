@@ -146,9 +146,10 @@ mcp = FastMCP(
     instructions=(
         "Use these tools to record and review the user's daily accomplishments. "
 
-        "All date parameters use Unix timestamps (seconds since epoch). "
+        "All date parameters MUST be Unix timestamps (seconds since epoch, integers). "
+        "NEVER pass date strings like 'YYYY-MM-DD'. "
         "To get the current timestamp, run: date +%s in bash. "
-        "To get a specific date's timestamp: date -d 'YYYY-MM-DD' +%s. "
+        "The date field on log_accomplishment is REQUIRED — always run `date +%s` first. "
 
         "BEFORE logging at the end of a session: call get_accomplishments with today's timestamp "
         "to see what is already recorded. If related accomplishments exist, update them with "
@@ -198,9 +199,9 @@ def log_accomplishment(
     title: str,
     description: str,
     category: str,
+    date: int,
     impact_level: str = "medium",
     tags: list[str] = [],
-    date: Optional[int] = None,
     context: str = "work",
     project: Optional[str] = None,
 ) -> dict:
@@ -215,10 +216,10 @@ def log_accomplishment(
         description: Detailed description of what was done and why it matters
         category: One of: feature, bugfix, learning, review, design,
                   documentation, refactor, infrastructure, meeting, other
+        date: Unix timestamp (seconds since epoch). REQUIRED.
+              Get it by running: date +%s
         impact_level: Significance — low | medium | high
         tags: Optional list of keywords (e.g. ["python", "api", "auth"])
-        date: Unix timestamp (seconds since epoch). Defaults to now.
-              Use int(time.time()) to get the current timestamp.
         context: Where this work belongs — e.g. "work", "side_project",
                  "personal", or any custom label. Always defaults to "work"
                  unless the user explicitly says otherwise.
@@ -229,6 +230,8 @@ def log_accomplishment(
         return {"error": f"Invalid category '{category}'. Must be one of: {VALID_CATEGORIES}"}
     if impact_level not in VALID_IMPACT:
         return {"error": f"Invalid impact_level '{impact_level}'. Must be one of: {VALID_IMPACT}"}
+    if not isinstance(date, int):
+        return {"error": f"date must be a Unix timestamp (int), got {type(date).__name__}. Run: date +%s"}
 
     record = database.log_accomplishment(
         DB_PATH, title, description, category, impact_level, tags, date, context, project
@@ -349,6 +352,8 @@ def update_accomplishment(
         return {"error": f"Invalid category '{category}'. Must be one of: {VALID_CATEGORIES}"}
     if impact_level is not None and impact_level not in VALID_IMPACT:
         return {"error": f"Invalid impact_level '{impact_level}'. Must be one of: {VALID_IMPACT}"}
+    if date is not None and not isinstance(date, int):
+        return {"error": f"date must be a Unix timestamp (int), got {type(date).__name__}. Run: date +%s"}
 
     updated = database.update_accomplishment(DB_PATH, id, title, description, category, impact_level, tags, date, context, project)
     if updated is None:
