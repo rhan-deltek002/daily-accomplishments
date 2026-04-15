@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Daily Accomplishments</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;0,9..144,700;1,9..144,300&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
   <script>
     // Apply theme + palette immediately (before render) to avoid flash
@@ -155,21 +158,37 @@
     <div id="pagination"></div>
 
     <div id="tags-panel" style="display:none">
-      <div class="tag-viz">
-        <div class="tag-cloud-wrap">
-          <h3>Tag Cloud</h3>
-          <div class="tag-cloud" id="tag-cloud"></div>
-        </div>
-        <div class="tag-charts-row">
-          <div class="tag-chart-wrap">
-            <h3>Tag Frequency</h3>
-            <div class="tag-chart" id="tag-chart"></div>
+      <div class="tag-intel">
+        <div class="ti-header">
+          <div>
+            <div class="ti-title">Tag Intelligence</div>
+            <div class="ti-subtitle" id="ti-subtitle">— unique tags · — total uses</div>
           </div>
-          <div class="tag-pie-wrap">
-            <h3>Tag Distribution</h3>
-            <div id="tag-pie"></div>
+          <div class="ti-controls">
+            <input class="ti-search-input" id="ti-search-input" type="text" placeholder="Filter tags…" oninput="renderTagTable()">
+            <select class="ti-sort-select" id="ti-sort-select" onchange="renderTagTable()">
+              <option value="freq">Most used</option>
+              <option value="recent">Most recent</option>
+              <option value="trend">Trending</option>
+              <option value="az">A → Z</option>
+            </select>
           </div>
         </div>
+        <div class="ti-bubbles-wrap">
+          <div class="ti-viz-label">Usage by tag</div>
+          <div id="ti-bubbles"></div>
+        </div>
+        <div class="ti-thead">
+          <span class="ti-col-rank">#</span>
+          <span class="ti-col-tag">Tag</span>
+          <span class="ti-col-uses">Uses</span>
+          <span class="ti-col-spark">12-month trend</span>
+          <span class="ti-col-share">Share</span>
+          <span class="ti-col-last">Last used</span>
+          <span class="ti-col-arrow"></span>
+        </div>
+        <div id="ti-rows"></div>
+        <button id="ti-show-more" class="ti-show-more" onclick="tiShowMore()" style="display:none"></button>
       </div>
     </div>
 

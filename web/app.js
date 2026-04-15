@@ -272,6 +272,7 @@ function setView(v) {
   document.getElementById('view-toggle').style.display    = isSettings ? 'none' : '';
   document.getElementById('result-info').style.display    = isData ? '' : 'none';
   document.getElementById('content').style.display        = isData ? '' : 'none';
+  document.getElementById('pagination').style.display     = isData ? '' : 'none';
   document.getElementById('settings-panel').style.display = isSettings ? '' : 'none';
   document.getElementById('tags-panel').style.display     = isTags ? '' : 'none';
   document.getElementById('btn-settings').classList.toggle('active', isSettings);
@@ -648,7 +649,7 @@ async function deleteItem(id) {
   } catch (e) { alert('Delete failed: ' + e.message); }
 }
 
-// ── Tag Visualizer ───────────────────────────────────────────────────────
+// ── Tag Intelligence ─────────────────────────────────────────────────────
 const TAG_PALETTE_LIGHT = [
   { bg: '#eff6ff', text: '#1d4ed8' },  // blue
   { bg: '#f5f3ff', text: '#6d28d9' },  // violet
@@ -693,69 +694,87 @@ function tagColor(tag) {
   return isDarkMode() ? TAG_PALETTE_DARK[idx] : TAG_PALETTE_LIGHT[idx];
 }
 
-async function renderTags() {
-  document.getElementById('tag-cloud').innerHTML = '<span style="color:var(--muted);font-size:0.85rem">Loading…</span>';
-  document.getElementById('tag-chart').innerHTML = '';
-  document.getElementById('tag-pie').innerHTML = '';
+// Tag Intelligence state
+let _tiTagMap = {};
+let _tiTotalUses = 0;
+let _tiExpanded = null;
+let _tiShowAll = false;
+const TI_PAGE_SIZE = 20;
 
-  // Fetch all accomplishments (respect current period filter)
+function relativeTime(ts) {
+  if (!ts) return '—';
+  const diff = Date.now() / 1000 - ts;
+  if (diff < 86400) return 'today';
+  if (diff < 86400 * 2) return 'yesterday';
+  if (diff < 86400 * 7) return Math.floor(diff / 86400) + 'd ago';
+  if (diff < 86400 * 30) return Math.floor(diff / 86400 / 7) + 'w ago';
+  if (diff < 86400 * 365) return Math.floor(diff / 86400 / 30) + 'mo ago';
+  return Math.floor(diff / 86400 / 365) + 'y ago';
+}
+
+function tiSparklineSVG(uses, now, color) {
+  const buckets = new Array(12).fill(0);
+  for (const ts of uses) {
+    const mago = Math.floor((now - ts) / (30.44 * 86400));
+    if (mago < 12) buckets[11 - mago]++;
+  }
+  const max = Math.max(...buckets, 1);
+  const W = 72, H = 20;
+  const pts = buckets.map((v, i) => {
+    const x = ((i / 11) * W).toFixed(1);
+    const y = (H - Math.max((v / max) * H, v > 0 ? 2 : 0)).toFixed(1);
+    return x + ',' + y;
+  }).join(' ');
+  const safeId = 'sg' + Math.abs(color.split('').reduce((h, c) => (h * 31 + c.charCodeAt(0)) & 0xfffff, 0));
+  const first = 'M0,' + H + ' ';
+  const mid = buckets.map((v, i) => {
+    const x = ((i / 11) * W).toFixed(1);
+    const y = (H - Math.max((v / max) * H, v > 0 ? 2 : 0)).toFixed(1);
+    return 'L' + x + ',' + y;
+  }).join(' ');
+  const areaD = first + mid + ' L' + W + ',' + H + ' Z';
+  return '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" class="ti-spark"><defs>'
+    + '<linearGradient id="' + safeId + '" x1="0" y1="0" x2="0" y2="1">'
+    + '<stop offset="0%" stop-color="' + color + '" stop-opacity="0.25"/>'
+    + '<stop offset="100%" stop-color="' + color + '" stop-opacity="0"/>'
+    + '</linearGradient></defs>'
+    + '<path d="' + areaD + '" fill="url(#' + safeId + ')"/>'
+    + '<polyline points="' + pts + '" fill="none" stroke="' + color + '" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>'
+    + '</svg>';
+}
+
+async function renderTags() {
+  const rowsEl = document.getElementById('ti-rows');
+  if (rowsEl) rowsEl.innerHTML = '<div class="ti-empty">Loading\u2026</div>';
+
   let data = allData;
   if (!data.length) {
-    try {
-      const r = await fetch('/api/accomplishments');
-      data = await r.json();
-    } catch { return; }
+    try { data = await (await fetch('/api/accomplishments')).json(); }
+    catch { return; }
   }
 
-  // Count tags
-  const counts = {};
+  _tiTagMap = {};
   for (const item of data) {
-    for (const tag of (item.tags || [])) {
-      const t = tag.trim().toLowerCase();
-      if (t) counts[t] = (counts[t] || 0) + 1;
+    for (const raw of (item.tags || [])) {
+      const tag = raw.trim().toLowerCase();
+      if (!tag) continue;
+      if (!_tiTagMap[tag]) _tiTagMap[tag] = { count: 0, uses: [], lastUsed: 0, items: [] };
+      _tiTagMap[tag].count++;
+      _tiTagMap[tag].uses.push(item.date);
+      if (item.date > _tiTagMap[tag].lastUsed) _tiTagMap[tag].lastUsed = item.date;
+      _tiTagMap[tag].items.push(item);
     }
   }
 
-  const sorted = Object.entries(counts).sort(([, a], [, b]) => b - a);
+  _tiTotalUses = Object.values(_tiTagMap).reduce((s, d) => s + d.count, 0);
+  const unique = Object.keys(_tiTagMap).length;
+  const sub = document.getElementById('ti-subtitle');
+  if (sub) sub.textContent = unique + ' unique tag' + (unique !== 1 ? 's' : '') + ' \u00b7 ' + _tiTotalUses + ' total use' + (_tiTotalUses !== 1 ? 's' : '');
 
-  if (!sorted.length) {
-    document.getElementById('tag-cloud').innerHTML =
-      '<span style="color:var(--muted);font-size:0.85rem">No tags found in the current view.</span>';
-    document.getElementById('tag-pie').innerHTML = '';
-    return;
-  }
-
-  const max = sorted[0][1];
-  const min = sorted[sorted.length - 1][1];
-
-  // Cloud — alphabetical order, font size between 0.85rem and 2.4rem by frequency
-  const cloudHtml = [...sorted].sort(([a], [b]) => a.localeCompare(b)).map(([tag, count]) => {
-    const ratio = max === min ? 1 : (count - min) / (max - min);
-    const size = (0.85 + ratio * 1.55).toFixed(2);
-    const { bg, text } = tagColor(tag);
-    return `<span class="cloud-tag"
-      style="font-size:${size}rem;background:${bg};color:${text}"
-      onclick="filterByTag('${esc(tag)}')"
-      title="${count} use${count !== 1 ? 's' : ''}">${esc(tag)}</span>`;
-  }).join('');
-  document.getElementById('tag-cloud').innerHTML = cloudHtml;
-
-  // Bar chart — top 20, bars coloured per tag
-  const top = sorted.slice(0, 20);
-  const barHtml = top.map(([tag, count]) => {
-    const pct = ((count / max) * 100).toFixed(1);
-    const { text } = tagColor(tag);
-    return `
-      <div class="bar-row">
-        <span class="bar-label">${esc(tag)}</span>
-        <div class="bar-track">
-          <div class="bar-fill" style="width:${pct}%;background:${text}"></div>
-        </div>
-        <span class="bar-count">${count}</span>
-      </div>`;
-  }).join('');
-  document.getElementById('tag-chart').innerHTML = barHtml;
-  renderPieChart(sorted);
+  _tiExpanded = null;
+  _tiShowAll = false;
+  requestAnimationFrame(renderBubbleChart);
+  renderTagTable();
 }
 
 function filterByTag(tag) {
@@ -764,92 +783,216 @@ function filterByTag(tag) {
   applyFilters();
 }
 
-function renderPieChart(sorted) {
-  const container = document.getElementById('tag-pie');
+function renderBubbleChart() {
+  var container = document.getElementById('ti-bubbles');
   if (!container) return;
+  var entries = Object.entries(_tiTagMap).sort(function(a, b) { return b[1].count - a[1].count; }).slice(0, 50);
+  if (!entries.length) { while (container.firstChild) container.removeChild(container.firstChild); return; }
 
-  const MAX = 10;
-  const top = sorted.slice(0, MAX);
-  const rest = sorted.slice(MAX);
-  const restCount = rest.reduce((s, [, c]) => s + c, 0);
+  // Use real pixel dimensions — viewBox matches exactly so font-size units = px
+  var W = container.clientWidth || 700;
+  var H = 230;
+  var maxCount = entries[0][1].count;
+  var maxR = Math.min(H * 0.38, W / Math.max(entries.length, 8) * 1.6);
+  var minR = Math.max(10, maxR * 0.22);
 
-  const entries = [...top];
-  if (restCount > 0) entries.push([`other tags (${rest.length})`, restCount]);
-
-  const total = entries.reduce((s, [, c]) => s + c, 0);
-  if (!total) { container.innerHTML = ''; return; }
-
-  const cx = 100, cy = 100, R = 80, ri = 44;
-  let a = -Math.PI / 2;
-
-  function pt(angle, rad) { return [cx + rad * Math.cos(angle), cy + rad * Math.sin(angle)]; }
-
-  const slices = entries.map(([tag, count]) => {
-    const sa = a;
-    a += (count / total) * 2 * Math.PI;
-    const ea = a;
-    const large = ea - sa > Math.PI ? 1 : 0;
-    const [x1, y1] = pt(sa, R), [x2, y2] = pt(ea, R);
-    const [x3, y3] = pt(ea, ri), [x4, y4] = pt(sa, ri);
-    const d = `M${x1},${y1}A${R},${R},0,${large},1,${x2},${y2}L${x3},${y3}A${ri},${ri},0,${large},0,${x4},${y4}Z`;
-    const isOther = tag.startsWith('other tags');
-    const color = isOther ? (isDarkMode() ? '#4b5563' : '#9ca3af') : tagColor(tag).text;
-    const pct = ((count / total) * 100).toFixed(1);
-    return { tag, count, pct, d, color, isOther };
+  // Spread circles across full width initially (not spiralled to center)
+  var circles = entries.map(function(e, i) {
+    var tag = e[0], d = e[1];
+    var r = minR + (maxR - minR) * Math.sqrt(d.count / maxCount);
+    var angle = i * 2.39996;
+    var spreadX = (W * 0.45) * Math.cos(angle);
+    var spreadY = (H * 0.38) * Math.sin(angle);
+    return { tag: tag, count: d.count, r: r, x: W / 2 + spreadX, y: H / 2 + spreadY };
   });
 
-  window._pieSlices = slices;
-  window._pieTotal = total;
+  // Push apart with asymmetric gravity: strong vertical (keeps flat), weak horizontal (keeps wide)
+  for (var iter = 0; iter < 160; iter++) {
+    for (var i = 0; i < circles.length; i++) {
+      for (var j = i + 1; j < circles.length; j++) {
+        var a = circles[i], b = circles[j];
+        var dx = b.x - a.x, dy = b.y - a.y;
+        var dd = Math.sqrt(dx * dx + dy * dy) || 0.01;
+        var overlap = a.r + b.r + 3 - dd;
+        if (overlap > 0) {
+          var f = overlap * 0.55 / dd;
+          a.x -= dx * f; a.y -= dy * f;
+          b.x += dx * f; b.y += dy * f;
+        }
+      }
+      // Strong vertical gravity compresses height; weak horizontal keeps spread wide
+      circles[i].x += (W / 2 - circles[i].x) * 0.004;
+      circles[i].y += (H / 2 - circles[i].y) * 0.06;
+    }
+  }
 
-  const paths = slices.map((s, i) =>
-    `<path d="${s.d}" fill="${s.color}" opacity="0.85" class="pie-slice"
-      onmouseenter="pieOver(${i})" onmouseleave="pieOut()"
-      onclick="${s.isOther ? '' : `filterByTag('${esc(s.tag)}')`}"
-      style="cursor:${s.isOther ? 'default' : 'pointer'};transition:opacity .12s"/>`
-  ).join('');
+  // Clamp to canvas bounds
+  circles.forEach(function(c) {
+    c.x = Math.max(c.r + 2, Math.min(W - c.r - 2, c.x));
+    c.y = Math.max(c.r + 2, Math.min(H - c.r - 2, c.y));
+  });
 
-  const legendRows = slices.map((s, i) =>
-    `<div class="pie-leg" onmouseenter="pieOver(${i})" onmouseleave="pieOut()"
-       onclick="${s.isOther ? '' : `filterByTag('${esc(s.tag)}')`}"
-       style="cursor:${s.isOther ? 'default' : 'pointer'}">
-      <span class="pie-dot" style="background:${s.color}"></span>
-      <span class="pie-leg-tag">${esc(s.tag)}</span>
-      <span class="pie-leg-pct">${s.pct}%</span>
-    </div>`
-  ).join('');
+  var ns = 'http://www.w3.org/2000/svg';
+  var svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+  svg.setAttribute('width', '100%');
+  svg.setAttribute('height', H);
+  svg.style.display = 'block';
 
-  container.innerHTML = `
-    <div class="pie-layout">
-      <svg viewBox="0 0 200 200" class="pie-svg">
-        ${paths}
-        <circle cx="${cx}" cy="${cy}" r="${ri - 1}" fill="var(--surface)"/>
-        <text id="pie-c1" x="${cx}" y="${cy - 5}" text-anchor="middle" class="pie-c1">${total}</text>
-        <text id="pie-c2" x="${cx}" y="${cy + 14}" text-anchor="middle" class="pie-c2">total uses</text>
-      </svg>
-      <div class="pie-legend">${legendRows}</div>
-    </div>`;
+  circles.forEach(function(c) {
+    var colors = tagColor(c.tag);
+    var g = document.createElementNS(ns, 'g');
+    g.setAttribute('class', 'ti-bubble');
+    g.style.cursor = 'pointer';
+    (function(tag) { g.addEventListener('click', function() { filterByTag(tag); }); })(c.tag);
+
+    var circle = document.createElementNS(ns, 'circle');
+    circle.setAttribute('cx', c.x.toFixed(1));
+    circle.setAttribute('cy', c.y.toFixed(1));
+    circle.setAttribute('r', c.r.toFixed(1));
+    circle.setAttribute('fill', colors.bg);
+    circle.setAttribute('stroke', colors.text);
+    circle.setAttribute('stroke-width', '1.5');
+    var title = document.createElementNS(ns, 'title');
+    title.textContent = c.tag + ': ' + c.count + ' use' + (c.count !== 1 ? 's' : '');
+    g.appendChild(circle);
+    g.appendChild(title);
+
+    if (c.r >= 14) {
+      var fs = Math.max(9, Math.min(13, c.r * 0.46));
+      var maxChars = Math.floor(c.r * 1.8 / (fs * 0.58));
+      var label = c.tag.length > maxChars ? c.tag.slice(0, maxChars - 1) + '\u2026' : c.tag;
+      var text = document.createElementNS(ns, 'text');
+      text.setAttribute('x', c.x.toFixed(1));
+      text.setAttribute('y', (c.y + fs * 0.38).toFixed(1));
+      text.setAttribute('text-anchor', 'middle');
+      text.setAttribute('font-size', fs);
+      text.setAttribute('fill', colors.text);
+      text.setAttribute('font-weight', '600');
+      text.setAttribute('font-family', "'DM Mono', monospace");
+      text.setAttribute('pointer-events', 'none');
+      text.textContent = label;
+      g.appendChild(text);
+    }
+    svg.appendChild(g);
+  });
+
+  while (container.firstChild) container.removeChild(container.firstChild);
+  container.appendChild(svg);
 }
 
-function pieOver(idx) {
-  const s = window._pieSlices?.[idx];
-  if (!s) return;
-  document.querySelectorAll('.pie-slice').forEach((el, i) => { el.style.opacity = i === idx ? '1' : '0.3'; });
-  document.querySelectorAll('.pie-leg').forEach((el, i) => { el.style.opacity = i === idx ? '1' : '0.4'; });
-  const c1 = document.getElementById('pie-c1');
-  const c2 = document.getElementById('pie-c2');
-  if (c1) c1.textContent = s.pct + '%';
-  if (c2) c2.textContent = s.isOther ? 'other tags' : esc(s.tag);
+function tiToggleExpand(tag) {
+  _tiExpanded = (_tiExpanded === tag) ? null : tag;
+  renderTagTable();
 }
 
-function pieOut() {
-  if (!window._pieSlices) return;
-  document.querySelectorAll('.pie-slice').forEach(el => { el.style.opacity = '0.85'; });
-  document.querySelectorAll('.pie-leg').forEach(el => { el.style.opacity = '1'; });
-  const c1 = document.getElementById('pie-c1');
-  const c2 = document.getElementById('pie-c2');
-  if (c1) c1.textContent = window._pieTotal;
-  if (c2) c2.textContent = 'total uses';
+function tiShowMore() {
+  _tiShowAll = true;
+  renderTagTable();
 }
+
+function tiGetSorted() {
+  const sort = (document.getElementById('ti-sort-select') || {}).value || 'freq';
+  const search = ((document.getElementById('ti-search-input') || {}).value || '').toLowerCase();
+  let entries = Object.entries(_tiTagMap);
+  if (search) entries = entries.filter(function(e) { return e[0].includes(search); });
+  const now = Date.now() / 1000;
+  if (sort === 'freq') {
+    entries.sort(function(a, b) { return b[1].count - a[1].count; });
+  } else if (sort === 'az') {
+    entries.sort(function(a, b) { return a[0].localeCompare(b[0]); });
+  } else if (sort === 'recent') {
+    entries.sort(function(a, b) { return b[1].lastUsed - a[1].lastUsed; });
+  } else if (sort === 'trend') {
+    entries.sort(function(a, b) {
+      function score(d) {
+        const r = d.uses.filter(function(ts) { return now - ts < 86400 * 90; }).length;
+        const o = d.uses.filter(function(ts) { return now - ts >= 86400 * 90 && now - ts < 86400 * 270; }).length;
+        return r - o * 0.5;
+      }
+      return score(b[1]) - score(a[1]);
+    });
+  }
+  return entries;
+}
+
+function renderTagTable() {
+  const entries = tiGetSorted();
+  const showMoreEl = document.getElementById('ti-show-more');
+  const rowsEl = document.getElementById('ti-rows');
+  if (!rowsEl) return;
+  if (!entries.length) {
+    rowsEl.innerHTML = '<div class="ti-empty">No tags match your filter.</div>';
+    if (showMoreEl) showMoreEl.style.display = 'none';
+    return;
+  }
+  const visible = _tiShowAll ? entries : entries.slice(0, TI_PAGE_SIZE);
+  const now = Date.now() / 1000;
+  const CAT_COLORS = {
+    feature: '#3b82f6', bugfix: '#ef4444', learning: '#8b5cf6',
+    review: '#14b8a6', design: '#ec4899', documentation: '#6b7280',
+    refactor: '#f59e0b', infrastructure: '#10b981', meeting: '#6366f1', other: '#94a3b8'
+  };
+  const rows = visible.map(function(entry, idx) {
+    const tag = entry[0], d = entry[1];
+    const rank = String(idx + 1).padStart(2, '0');
+    const pct = _tiTotalUses ? ((d.count / _tiTotalUses) * 100).toFixed(1) : '0.0';
+    const colors = tagColor(tag);
+    const bg = colors.bg, tc = colors.text;
+    const spark = tiSparklineSVG(d.uses, now, tc);
+    const isExp = _tiExpanded === tag;
+
+    // Build detail section using DOM methods to avoid XSS with user content
+    let detailHtml = '';
+    if (isExp) {
+      const recent = d.items.slice().sort(function(a, b) { return b.date - a.date; }).slice(0, 5);
+      const projects = [];
+      d.items.forEach(function(i) { if (i.project && projects.indexOf(i.project) < 0) projects.push(i.project); });
+      const projChips = projects.slice(0, 6).map(function(p) {
+        return '<span class="ti-proj-chip">' + esc(p) + '</span>';
+      }).join('');
+      const detailRows = recent.map(function(item) {
+        const catColor = CAT_COLORS[item.category] || CAT_COLORS.other;
+        return '<div class="ti-detail-row">'
+          + '<span class="ti-detail-cat" style="background:' + catColor + '">' + esc(item.category || 'other') + '</span>'
+          + '<span class="ti-detail-title">' + esc(item.title) + '</span>'
+          + '<span class="ti-detail-when">' + relativeTime(item.date) + '</span>'
+          + '</div>';
+      }).join('');
+      detailHtml = '<div class="ti-detail"><div class="ti-detail-inner">'
+        + (projChips ? '<div class="ti-detail-projects">' + projChips + '</div>' : '')
+        + '<div class="ti-detail-rows">' + detailRows + '</div>'
+        + '<div class="ti-detail-footer"><button class="ti-filter-btn" onclick="filterByTag(\'' + esc(tag) + '\')">'
+        + 'View all ' + d.count + ' accomplishment' + (d.count !== 1 ? 's' : '') + ' \u2192'
+        + '</button></div>'
+        + '</div></div>';
+    }
+
+    return '<div class="ti-row' + (isExp ? ' ti-row-expanded' : '') + '" data-tag="' + esc(tag) + '">'
+      + '<div class="ti-row-main" onclick="tiToggleExpand(\'' + esc(tag) + '\')">'
+      + '<span class="ti-col-rank ti-rank-num">' + rank + '</span>'
+      + '<span class="ti-col-tag"><span class="ti-tag-badge" style="background:' + bg + ';color:' + tc + '">' + esc(tag) + '</span></span>'
+      + '<span class="ti-col-uses ti-mono">' + d.count + '</span>'
+      + '<span class="ti-col-spark">' + spark + '</span>'
+      + '<span class="ti-col-share"><span class="ti-share-text">' + pct + '%</span>'
+      + '<span class="ti-share-bar"><span class="ti-share-fill" style="width:' + pct + '%;background:' + tc + '"></span></span></span>'
+      + '<span class="ti-col-last">' + relativeTime(d.lastUsed) + '</span>'
+      + '<span class="ti-col-arrow">\u25be</span>'
+      + '</div>'
+      + detailHtml
+      + '</div>';
+  }).join('');
+
+  rowsEl.innerHTML = rows;
+
+  if (!_tiShowAll && entries.length > TI_PAGE_SIZE) {
+    if (showMoreEl) { showMoreEl.textContent = 'Show all ' + entries.length + ' tags'; showMoreEl.style.display = ''; }
+  } else {
+    if (showMoreEl) showMoreEl.style.display = 'none';
+  }
+}
+
+// (renderPieChart, pieOver, pieOut removed — replaced by Tag Intelligence panel)
 
 // ── Palette theming ──────────────────────────────────────────────────────
 
@@ -1032,6 +1175,15 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () 
   btn.innerHTML = THEME_ICONS[t];
   btn.title = THEME_LABELS[t];
 })();
+
+// Re-render bubble chart on resize (debounced)
+var _tiResizeTimer;
+window.addEventListener('resize', function() {
+  clearTimeout(_tiResizeTimer);
+  _tiResizeTimer = setTimeout(function() {
+    if (currentView === 'tags') renderBubbleChart();
+  }, 120);
+});
 
 // ── Init ────────────────────────────────────────────────────────────────
 loadStats();
