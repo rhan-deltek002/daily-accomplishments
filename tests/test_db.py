@@ -335,6 +335,177 @@ class TestExecuteMerge:
 
 
 # ---------------------------------------------------------------------------
+# store_monthly_summary / get_monthly_summary
+# ---------------------------------------------------------------------------
+
+class TestStoreMonthlySummary:
+    def _sample_stats(self):
+        return {
+            "total": 5,
+            "by_category": {"feature": 3, "bugfix": 2},
+            "by_impact": {"high": 1, "medium": 3, "low": 1},
+            "by_project": {"my-app": 5},
+            "top_tags": ["python"],
+            "high_impact_titles": ["Shipped login"],
+        }
+
+    def _sample_key_wins(self):
+        return [{"title": "Shipped login", "why": "Unblocked team"}]
+
+    def test_store_returns_dict_with_month(self, tmp_db):
+        result = db.store_monthly_summary(
+            tmp_db, "2025-03", "Great month.", self._sample_key_wins(), self._sample_stats()
+        )
+        assert result["month"] == "2025-03"
+        assert result["narrative"] == "Great month."
+
+    def test_store_merges_key_wins_into_stats(self, tmp_db):
+        db.store_monthly_summary(
+            tmp_db, "2025-03", "Great month.", self._sample_key_wins(), self._sample_stats()
+        )
+        summary = db.get_monthly_summary(tmp_db, "2025-03")
+        assert summary["stats"]["key_wins"] == self._sample_key_wins()
+        assert summary["stats"]["total"] == 5
+
+    def test_get_returns_none_when_missing(self, tmp_db):
+        assert db.get_monthly_summary(tmp_db, "2025-03") is None
+
+    def test_store_upserts_on_duplicate_month(self, tmp_db):
+        db.store_monthly_summary(
+            tmp_db, "2025-03", "First.", self._sample_key_wins(), self._sample_stats()
+        )
+        db.store_monthly_summary(
+            tmp_db, "2025-03", "Updated.", self._sample_key_wins(), self._sample_stats()
+        )
+        summary = db.get_monthly_summary(tmp_db, "2025-03")
+        assert summary["narrative"] == "Updated."
+        conn = sqlite3.connect(tmp_db)
+        count = conn.execute("SELECT COUNT(*) FROM monthly_summaries WHERE month='2025-03'").fetchone()[0]
+        conn.close()
+        assert count == 1
+
+    def test_stats_json_round_trips(self, tmp_db):
+        db.store_monthly_summary(
+            tmp_db, "2025-03", "N.", self._sample_key_wins(), self._sample_stats()
+        )
+        summary = db.get_monthly_summary(tmp_db, "2025-03")
+        assert isinstance(summary["stats"], dict)
+        assert summary["stats"]["by_category"]["feature"] == 3
+
+
+# ---------------------------------------------------------------------------
+# get_monthly_summaries
+# ---------------------------------------------------------------------------
+
+class TestGetMonthlySummaries:
+    def _store(self, db_path, month):
+        db.store_monthly_summary(
+            db_path, month, f"Summary for {month}.",
+            [], {"total": 1, "by_category": {}, "by_impact": {"low": 0, "medium": 1, "high": 0},
+                 "by_project": {}, "top_tags": [], "high_impact_titles": []}
+        )
+
+    def test_returns_all_when_no_filter(self, tmp_db):
+        self._store(tmp_db, "2025-01")
+        self._store(tmp_db, "2025-02")
+        results = db.get_monthly_summaries(tmp_db)
+        assert len(results) == 2
+
+    def test_ordered_newest_first(self, tmp_db):
+        self._store(tmp_db, "2025-01")
+        self._store(tmp_db, "2025-03")
+        results = db.get_monthly_summaries(tmp_db)
+        assert results[0]["month"] == "2025-03"
+        assert results[1]["month"] == "2025-01"
+
+    def test_filter_date_from(self, tmp_db):
+        self._store(tmp_db, "2025-01")
+        self._store(tmp_db, "2025-06")
+        self._store(tmp_db, "2025-12")
+        results = db.get_monthly_summaries(tmp_db, date_from="2025-06")
+        months = [r["month"] for r in results]
+        assert "2025-01" not in months
+        assert "2025-06" in months
+        assert "2025-12" in months
+
+    def test_filter_date_to(self, tmp_db):
+        self._store(tmp_db, "2025-01")
+        self._store(tmp_db, "2025-06")
+        self._store(tmp_db, "2025-12")
+        results = db.get_monthly_summaries(tmp_db, date_to="2025-06")
+        months = [r["month"] for r in results]
+        assert "2025-01" in months
+        assert "2025-06" in months
+        assert "2025-12" not in months
+
+    def test_filter_both(self, tmp_db):
+        for m in ["2025-01", "2025-06", "2025-09", "2025-12"]:
+            self._store(tmp_db, m)
+        results = db.get_monthly_summaries(tmp_db, date_from="2025-06", date_to="2025-09")
+        months = [r["month"] for r in results]
+        assert months == ["2025-09", "2025-06"]
+
+    def test_empty_when_none(self, tmp_db):
+        assert db.get_monthly_summaries(tmp_db) == []
+
+
+# ---------------------------------------------------------------------------
+# Gap detection
+# ---------------------------------------------------------------------------
+
+_MARCH_TS  = 1743379200   # 2025-03-31 00:00 UTC
+_APRIL_TS  = 1743465600   # 2025-04-01 00:00 UTC
+_APRIL2_TS = 1743552000   # 2025-04-02 00:00 UTC
+_JAN_TS    = 1735689600   # 2025-01-01 00:00 UTC
+
+
+class TestGapDetection:
+    def test_no_signal_when_same_month(self, tmp_db):
+        _log(tmp_db, title="First",  date_str=_APRIL_TS)
+        result = _log(tmp_db, title="Second", date_str=_APRIL2_TS)
+        assert result.get("needs_summary") is None
+
+    def test_signal_when_month_changes(self, tmp_db):
+        _log(tmp_db, title="March entry", date_str=_MARCH_TS)
+        result = _log(tmp_db, title="April entry", date_str=_APRIL_TS)
+        assert result["needs_summary"] is not None
+        assert result["needs_summary"]["month"] == "2025-03"
+
+    def test_signal_includes_records(self, tmp_db):
+        _log(tmp_db, title="March entry", date_str=_MARCH_TS)
+        result = _log(tmp_db, title="April entry", date_str=_APRIL_TS)
+        records = result["needs_summary"]["records"]
+        assert len(records) == 1
+        assert records[0]["title"] == "March entry"
+
+    def test_signal_includes_precomputed_stats(self, tmp_db):
+        _log(tmp_db, title="March entry", date_str=_MARCH_TS, impact_level="high")
+        result = _log(tmp_db, title="April entry", date_str=_APRIL_TS)
+        stats = result["needs_summary"]["stats"]
+        assert stats["total"] == 1
+        assert stats["high_impact_titles"] == ["March entry"]
+
+    def test_no_signal_on_first_ever_log(self, tmp_db):
+        result = _log(tmp_db, title="First ever", date_str=_APRIL_TS)
+        assert result.get("needs_summary") is None
+
+    def test_no_signal_when_summary_already_exists(self, tmp_db):
+        _log(tmp_db, title="March entry", date_str=_MARCH_TS)
+        db.store_monthly_summary(
+            tmp_db, "2025-03", "Already done.", [],
+            {"total": 1, "by_category": {}, "by_impact": {"low": 0, "medium": 1, "high": 0},
+             "by_project": {}, "top_tags": [], "high_impact_titles": []}
+        )
+        result = _log(tmp_db, title="April entry", date_str=_APRIL_TS)
+        assert result.get("needs_summary") is None
+
+    def test_multi_month_gap_only_summarises_prev_log_month(self, tmp_db):
+        _log(tmp_db, title="Jan entry", date_str=_JAN_TS)
+        result = _log(tmp_db, title="April entry", date_str=_APRIL_TS)
+        assert result["needs_summary"]["month"] == "2025-01"
+
+
+# ---------------------------------------------------------------------------
 # monthly_summaries table
 # ---------------------------------------------------------------------------
 

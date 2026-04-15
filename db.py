@@ -241,7 +241,33 @@ def log_accomplishment(
         row = conn.execute(
             "SELECT * FROM accomplishments WHERE id = ?", (cursor.lastrowid,)
         ).fetchone()
-        return _row_to_dict(row)
+        result = _row_to_dict(row)
+
+    # Gap detection: check if we've crossed a month boundary since the last log.
+    # Run outside the insert transaction so get_monthly_summary can open its own conn.
+    result["needs_summary"] = None
+    with get_conn(db_path) as conn:
+        prev = conn.execute(
+            "SELECT date FROM accomplishments WHERE id != ? ORDER BY id DESC LIMIT 1",
+            (result["id"],),
+        ).fetchone()
+
+    if prev:
+        prev_month = _ts_to_month(prev["date"])
+        new_month = _ts_to_month(date_ts)
+        if prev_month != new_month and not get_monthly_summary(db_path, prev_month):
+            month_records = get_accomplishments(
+                db_path,
+                date_from=f"{prev_month}-01",
+                date_to=_last_day_of_month(prev_month),
+            )
+            result["needs_summary"] = {
+                "month": prev_month,
+                "records": month_records,
+                "stats": _compute_month_stats(month_records),
+            }
+
+    return result
 
 
 def get_accomplishments(
@@ -545,6 +571,70 @@ def delete_accomplishment(db_path: str, id: int) -> bool:
         cursor = conn.execute("DELETE FROM accomplishments WHERE id = ?", (id,))
         conn.commit()
         return cursor.rowcount > 0
+
+
+def store_monthly_summary(
+    db_path: str,
+    month: str,
+    narrative: str,
+    key_wins: list,
+    stats: dict,
+) -> dict:
+    """Store or overwrite a monthly summary for YYYY-MM month.
+
+    key_wins is merged into the stats blob before persisting.
+    Uses INSERT OR REPLACE so calling twice for the same month is safe.
+    """
+    stats_to_store = dict(stats)
+    stats_to_store["key_wins"] = key_wins
+    generated_ts = int(time.time())
+
+    with get_conn(db_path) as conn:
+        conn.execute(
+            """INSERT OR REPLACE INTO monthly_summaries (month, narrative, stats, generated_at)
+               VALUES (?, ?, ?, ?)""",
+            (month, narrative, json.dumps(stats_to_store), generated_ts),
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT * FROM monthly_summaries WHERE month = ?", (month,)
+        ).fetchone()
+        return _summary_row_to_dict(row)
+
+
+def get_monthly_summary(db_path: str, month: str) -> Optional[dict]:
+    """Return the summary for a single YYYY-MM month, or None if not yet generated."""
+    with get_conn(db_path) as conn:
+        row = conn.execute(
+            "SELECT * FROM monthly_summaries WHERE month = ?", (month,)
+        ).fetchone()
+        return _summary_row_to_dict(row) if row else None
+
+
+def get_monthly_summaries(
+    db_path: str,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+) -> list:
+    """Return monthly summaries ordered newest-first.
+
+    Args:
+        date_from: Earliest month to include, as YYYY-MM string. Optional.
+        date_to:   Latest month to include, as YYYY-MM string. Optional.
+    """
+    query = "SELECT * FROM monthly_summaries WHERE 1=1"
+    params = []
+    if date_from:
+        query += " AND month >= ?"
+        params.append(date_from[:7])
+    if date_to:
+        query += " AND month <= ?"
+        params.append(date_to[:7])
+    query += " ORDER BY month DESC"
+
+    with get_conn(db_path) as conn:
+        rows = conn.execute(query, params).fetchall()
+        return [_summary_row_to_dict(row) for row in rows]
 
 
 def get_stats(db_path: str) -> dict:
