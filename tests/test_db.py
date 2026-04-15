@@ -453,6 +453,52 @@ class TestGetMonthlySummaries:
 # Gap detection
 # ---------------------------------------------------------------------------
 
+class TestGetUnsummarizedMonths:
+    def test_returns_months_without_summary(self, tmp_db):
+        _log(tmp_db, title="March", date_str=1743379200)
+        _log(tmp_db, title="April", date_str=1743465600)
+        result = db.get_unsummarized_months(tmp_db)
+        months = [r["month"] for r in result]
+        assert "2025-03" in months
+        assert "2025-04" in months
+
+    def test_excludes_already_summarized(self, tmp_db):
+        _log(tmp_db, title="March", date_str=1743379200)
+        _log(tmp_db, title="April", date_str=1743465600)
+        db.store_monthly_summary(
+            tmp_db, "2025-03", "Done.", [],
+            {"total": 1, "by_category": {}, "by_impact": {"low": 0, "medium": 1, "high": 0},
+             "by_project": {}, "top_tags": [], "high_impact_titles": []}
+        )
+        result = db.get_unsummarized_months(tmp_db)
+        months = [r["month"] for r in result]
+        assert "2025-03" not in months
+        assert "2025-04" in months
+
+    def test_returns_empty_when_all_summarized(self, tmp_db):
+        _log(tmp_db, title="March", date_str=1743379200)
+        db.store_monthly_summary(
+            tmp_db, "2025-03", "Done.", [],
+            {"total": 1, "by_category": {}, "by_impact": {"low": 0, "medium": 1, "high": 0},
+             "by_project": {}, "top_tags": [], "high_impact_titles": []}
+        )
+        assert db.get_unsummarized_months(tmp_db) == []
+
+    def test_includes_records_and_stats(self, tmp_db):
+        _log(tmp_db, title="March entry", date_str=1743379200, impact_level="high")
+        result = db.get_unsummarized_months(tmp_db)
+        assert len(result) == 1
+        assert result[0]["records"][0]["title"] == "March entry"
+        assert result[0]["stats"]["total"] == 1
+        assert result[0]["stats"]["high_impact_titles"] == ["March entry"]
+
+    def test_ordered_oldest_first(self, tmp_db):
+        _log(tmp_db, title="April", date_str=1743465600)
+        _log(tmp_db, title="Jan",   date_str=1735689600)
+        result = db.get_unsummarized_months(tmp_db)
+        assert result[0]["month"] < result[-1]["month"]
+
+
 _MARCH_TS  = 1743379200   # 2025-03-31 00:00 UTC
 _APRIL_TS  = 1743465600   # 2025-04-01 00:00 UTC
 _APRIL2_TS = 1743552000   # 2025-04-02 00:00 UTC

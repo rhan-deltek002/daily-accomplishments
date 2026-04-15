@@ -573,6 +573,38 @@ def delete_accomplishment(db_path: str, id: int) -> bool:
         return cursor.rowcount > 0
 
 
+def get_unsummarized_months(db_path: str) -> list:
+    """Return months that have accomplishments but no summary yet.
+
+    Each entry contains: month (YYYY-MM), records list, and pre-computed stats.
+    Ordered oldest-first so Claude can process chronologically.
+    """
+    with get_conn(db_path) as conn:
+        summarized = {
+            row[0] for row in conn.execute("SELECT month FROM monthly_summaries").fetchall()
+        }
+        month_rows = conn.execute(
+            "SELECT DISTINCT substr(datetime(date, 'unixepoch'), 1, 7) as m "
+            "FROM accomplishments ORDER BY m ASC"
+        ).fetchall()
+
+    months = [row[0] for row in month_rows if row[0] not in summarized]
+
+    result = []
+    for month in months:
+        records = get_accomplishments(
+            db_path,
+            date_from=f"{month}-01",
+            date_to=_last_day_of_month(month),
+        )
+        result.append({
+            "month": month,
+            "records": records,
+            "stats": _compute_month_stats(records),
+        })
+    return result
+
+
 def store_monthly_summary(
     db_path: str,
     month: str,

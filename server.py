@@ -456,6 +456,26 @@ def execute_merge(records: list[dict], output_path: Optional[str] = None) -> dic
 
 
 @mcp.tool()
+def get_unsummarized_months() -> list:
+    """
+    Return all months that have accomplishments but no summary yet.
+
+    Use this to backfill historical summaries. Each entry contains:
+      - month: YYYY-MM string
+      - records: full list of accomplishments for that month
+      - stats: pre-computed stats (total, by_category, by_impact, by_project,
+               top_tags, high_impact_titles)
+
+    After calling this, iterate over the results and call store_monthly_summary
+    for each month — write a narrative + key_wins from the provided records.
+    Process oldest-first (already ordered that way).
+
+    Returns an empty list if all months already have summaries.
+    """
+    return database.get_unsummarized_months(DB_PATH)
+
+
+@mcp.tool()
 def store_monthly_summary(
     month: str,
     narrative: str,
