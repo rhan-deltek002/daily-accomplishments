@@ -102,6 +102,34 @@ def _add_to_history(path: str, display_name: str, db_type: str = "active") -> No
 _config = _load_config()
 DB_PATH: str = _config.get("db_path") or os.environ.get("ACCOMPLISHMENTS_DB") or _DEFAULT_DB
 
+# In-memory cache for monthly summaries — avoids repeated slow SQLite reads on
+# network-mounted databases. Invalidated whenever a summary is stored or the DB
+# path is changed.
+_summaries_cache: Optional[list] = None
+_summaries_cache_db: str = ""  # tracks which DB the cache belongs to
+
+
+def _invalidate_summaries_cache() -> None:
+    global _summaries_cache
+    _summaries_cache = None
+
+
+def _get_summaries_cached(db_path: str, date_from=None, date_to=None) -> list:
+    """Return summaries from in-memory cache, populating it on first call."""
+    global _summaries_cache, _summaries_cache_db
+    if _summaries_cache is None or _summaries_cache_db != db_path:
+        _summaries_cache = database.get_monthly_summaries(db_path)
+        _summaries_cache_db = db_path
+    # Apply optional date filters in Python (cache holds the full list)
+    result = _summaries_cache
+    if date_from:
+        month_from = date_from[:7]
+        result = [s for s in result if s["month"] >= month_from]
+    if date_to:
+        month_to = date_to[:7]
+        result = [s for s in result if s["month"] <= month_to]
+    return result
+
 # Ensure the database directory exists and initialise
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 database.init_db(DB_PATH)
@@ -501,7 +529,9 @@ def store_monthly_summary(
                    entries that happen to have impact_level=high; use judgment.
         stats:     Pass through needs_summary.stats unchanged. Do not modify.
     """
-    return database.store_monthly_summary(DB_PATH, month, narrative, key_wins, stats)
+    result = database.store_monthly_summary(DB_PATH, month, narrative, key_wins, stats)
+    _invalidate_summaries_cache()
+    return result
 
 
 @mcp.tool()
@@ -582,7 +612,7 @@ async def api_monthly_summaries(
     date_to: Optional[str] = Query(None),
 ):
     return JSONResponse(
-        content=database.get_monthly_summaries(DB_PATH, date_from, date_to)
+        content=_get_summaries_cached(DB_PATH, date_from, date_to)
     )
 
 
@@ -621,6 +651,7 @@ async def api_save_settings(body: dict):
         return JSONResponse(status_code=400, content={"error": f"Could not open database: {e}"})
 
     DB_PATH = new_path
+    _invalidate_summaries_cache()
     display_name = os.path.splitext(os.path.basename(new_path))[0]
     _save_config({"db_path": new_path})
     _add_to_history(new_path, display_name, "active")
