@@ -102,35 +102,58 @@ function renderTimeline() {
   }
 
   // Group by date (local TZ)
-  const groups = {};
-  for (const item of allData) {
-    const key = tsToDateKey(item.date);
+  var groups = {};
+  for (var idx = 0; idx < allData.length; idx++) {
+    var item = allData[idx];
+    var key = tsToDateKey(item.date);
     if (!groups[key]) groups[key] = [];
     groups[key].push(item);
   }
 
-  const sortedGroups = Object.entries(groups).sort(([a], [b]) => b.localeCompare(a));
-  const totalPages = Math.ceil(sortedGroups.length / PAGE_SIZE);
+  var sortedGroups = Object.entries(groups).sort(function(a, b) { return b[0].localeCompare(a[0]); });
+  var totalPages = Math.ceil(sortedGroups.length / PAGE_SIZE);
   currentPage = Math.max(1, Math.min(currentPage, totalPages));
 
-  const start = (currentPage - 1) * PAGE_SIZE;
-  const pageGroups = sortedGroups.slice(start, start + PAGE_SIZE);
+  var start = (currentPage - 1) * PAGE_SIZE;
+  var pageGroups = sortedGroups.slice(start, start + PAGE_SIZE);
 
-  const html = pageGroups.map(([date, items]) => {
-    const d = new Date(date + 'T12:00:00');
-    const label = formatDateLabel(d);
-    return `
-      <div class="day-group">
-        <div class="day-header">
-          <span class="day-label">${label}</span>
-          <span class="day-count">${items.length}</span>
-          <div class="day-line"></div>
-        </div>
-        ${items.map(renderCard).join('')}
-      </div>`;
-  }).join('');
+  var today = new Date(); today.setHours(0,0,0,0);
+  var yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
 
-  document.getElementById('content').innerHTML = html;
+  var html = '';
+  for (var gi = 0; gi < pageGroups.length; gi++) {
+    var date = pageGroups[gi][0];
+    var items = pageGroups[gi][1];
+    var d = new Date(date + 'T12:00:00');
+    var dCopy = new Date(d); dCopy.setHours(0,0,0,0);
+
+    var dayNum = String(d.getDate()).padStart(2, '0');
+    var dayName = d.toLocaleDateString('en-US', { weekday: 'long' });
+    var monthYear = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    var specialLabel = '';
+    if (dCopy.getTime() === today.getTime()) specialLabel = 'Today';
+    else if (dCopy.getTime() === yesterday.getTime()) specialLabel = 'Yesterday';
+
+    var entriesHtml = '';
+    for (var ii = 0; ii < items.length; ii++) {
+      entriesHtml += renderCard(items[ii]);
+    }
+
+    html += '<div class="tl-day">'
+      + '<div class="tl-date-col">'
+      + '<div class="tl-day-num">' + dayNum + '</div>'
+      + '<div class="tl-day-meta">' + esc(dayName) + '</div>'
+      + '<div class="tl-day-meta">' + esc(monthYear) + '</div>'
+      + (specialLabel ? '<div class="tl-special-label">' + esc(specialLabel) + '</div>' : '')
+      + '<div class="tl-entry-count">' + items.length + (items.length === 1 ? ' entry' : ' entries') + '</div>'
+      + '</div>'
+      + '<div class="tl-body-col">'
+      + entriesHtml
+      + '</div>'
+      + '</div>';
+  }
+
+  document.getElementById('content').innerHTML = '<div class="tl-wrapper">' + html + '</div>';
   renderPagination(totalPages);
 }
 
@@ -165,7 +188,8 @@ function goToPage(n) {
 }
 
 async function renderAnnual() {
-  await loadMonthlySummaries();
+  // Use already-loaded summaries; refresh in background for next render
+  loadMonthlySummaries();
   if (allData.length === 0) {
     document.getElementById('content').innerHTML = emptyState();
     return;
@@ -182,32 +206,52 @@ async function renderAnnual() {
   const sortedMonths = Object.entries(months).sort(([a], [b]) => b.localeCompare(a));
   const currentMonth = tsToMonthKey(Date.now() / 1000);
 
-  const html = sortedMonths.map(([month, items]) => {
-      const [year, mo] = month.split('-');
-      const label = `${MONTH_NAMES[parseInt(mo, 10) - 1]} ${year}`;
-      const high = items.filter(i => i.impact_level === 'high').length;
-      const isCurrentMonth = month === currentMonth;
-      const cardsStyle = isCurrentMonth ? '' : ' style="display:none"';
-      const arrow = isCurrentMonth ? '▼' : '▶';
+  var html = '';
+  for (var mi = 0; mi < sortedMonths.length; mi++) {
+    var month = sortedMonths[mi][0];
+    var items = sortedMonths[mi][1];
+    var parts = month.split('-');
+    var year = parts[0];
+    var mo = parts[1];
+    var monthLabel = MONTH_NAMES[parseInt(mo, 10) - 1];
+    var high = items.filter(function(i) { return i.impact_level === 'high'; }).length;
+    var isCurrentMonth = month === currentMonth;
+    var cardsStyle = isCurrentMonth ? '' : ' style="display:none"';
+    var arrow = isCurrentMonth ? '\u25bc' : '\u25b6';
 
-      return `
-        <div class="month-section" data-month="${month}">
-          <div class="month-header" onclick="toggleMonth(this)">
-            <span class="month-name">📅 ${label}</span>
-            <div class="month-stats">
-              <span>${items.length} accomplished</span>
-              ${high > 0 ? `<span>🔴 ${high} high-impact</span>` : ''}
-            </div>
-            <span class="month-arrow">${arrow}</span>
-          </div>
-          ${renderSummaryBanner(monthlySummaries[month] || null)}
-          <div class="month-cards"${cardsStyle}>
-            ${renderMonthPage(month, items)}
-          </div>
-        </div>`;
-    }).join('');
+    // Category color dots (unique categories)
+    var seenCats = {};
+    var catDotsHtml = '';
+    for (var ci = 0; ci < items.length; ci++) {
+      var cat = items[ci].category;
+      if (!seenCats[cat]) {
+        seenCats[cat] = true;
+        catDotsHtml += '<span class="month-cat-dot" style="background:' + (CAT_COLORS[cat] || '#94a3b8') + '" title="' + esc(cat) + '"></span>';
+      }
+    }
 
-  document.getElementById('content').innerHTML = `<div class="monthly-grid">${html}</div>`;
+    html += '<div class="month-section" data-month="' + month + '">'
+      + '<div class="month-header" onclick="toggleMonth(this)">'
+      + '<div class="month-date-block">'
+      + '<div class="month-year-label">' + esc(year) + '</div>'
+      + '<div class="month-name-large">' + esc(monthLabel) + '</div>'
+      + '</div>'
+      + '<div class="month-meta">'
+      + '<div class="month-cat-dots">' + catDotsHtml + '</div>'
+      + '<div class="month-stats">' + items.length + ' accomplished'
+      + (high > 0 ? ' \u00b7 ' + high + ' high-impact' : '')
+      + '</div>'
+      + '</div>'
+      + '<span class="month-arrow">' + arrow + '</span>'
+      + '</div>'
+      + renderSummaryBanner(monthlySummaries[month] || null)
+      + '<div class="month-cards"' + cardsStyle + '>'
+      + renderMonthPage(month, items)
+      + '</div>'
+      + '</div>';
+  }
+
+  document.getElementById('content').innerHTML = '<div class="monthly-grid">' + html + '</div>';
 }
 
 function renderMonthPage(month, items) {
@@ -236,14 +280,22 @@ function renderSummaryBanner(summary) {
   if (!summary) return '';
   var stats = summary.stats || {};
   var keyWins = stats.key_wins || [];
-  var winsHtml = keyWins.map(function(w) {
-    return '<li class="msb-win"><span class="msb-win-title">' + esc(w.title) + '</span>'
-      + '<span class="msb-win-why">' + esc(w.why) + '</span></li>';
-  }).join('');
+  var winsHtml = '';
+  for (var wi = 0; wi < keyWins.length; wi++) {
+    var w = keyWins[wi];
+    winsHtml += '<li class="msb-win">'
+      + '<span class="msb-win-star">\u2605</span>'
+      + '<span class="msb-win-title">' + esc(w.title) + '</span>'
+      + (w.why ? '<span class="msb-win-why"> \u2014 ' + esc(w.why) + '</span>' : '')
+      + '</li>';
+  }
   return '<div class="month-summary-banner">'
-    + '<div class="msb-header"><span class="msb-label">Monthly Summary</span></div>'
+    + '<div class="msb-quote-mark">\u201C</div>'
+    + '<div class="msb-body">'
     + '<p class="msb-narrative">' + esc(summary.narrative) + '</p>'
     + (winsHtml ? '<ul class="msb-wins">' + winsHtml + '</ul>' : '')
+    + '<div><span class="msb-label">Monthly Summary</span></div>'
+    + '</div>'
     + '</div>';
 }
 
@@ -261,31 +313,31 @@ function contextClass(ctx) {
 }
 
 function renderCard(item) {
-  const catColor = CAT_COLORS[item.category] || '#94a3b8';
-  const tags = (item.tags || []).map(t => `<span class="tag-badge">${esc(t)}</span>`).join('');
-  const time = item.created_at ? tsToDate(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
-  const ctx = item.context || 'work';
-  const ctxLabel = ctx.replace(/_/g, ' ');
-  const proj = item.project;
-  return `
-    <div class="card" data-id="${item.id}">
-      <div class="card-actions">
-        <button class="action-btn" onclick="openEdit(${item.id})" title="Edit">✎ Edit</button>
-        <button class="action-btn delete" onclick="deleteItem(${item.id})" title="Delete">✕ Delete</button>
-      </div>
-      <div class="card-header">
-        <span class="impact-dot ${item.impact_level}" title="${item.impact_level} impact"></span>
-        <span class="card-title">${esc(item.title)}</span>
-      </div>
-      <div class="card-description">${esc(item.description)}</div>
-      <div class="card-footer">
-        <span class="context-badge ${contextClass(ctx)}">${esc(ctxLabel)}</span>
-        <span class="cat-badge" style="background:${catColor}">${item.category}</span>
-        ${proj ? `<span class="project-badge">${esc(proj)}</span>` : ''}
-        ${tags}
-        ${time ? `<span class="card-time">${time}</span>` : ''}
-      </div>
-    </div>`;
+  var catColor = CAT_COLORS[item.category] || '#94a3b8';
+  var tags = (item.tags || []).map(function(t) { return '<span class="tag-badge">' + esc(t) + '</span>'; }).join('');
+  var time = item.created_at ? tsToDate(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+  var ctx = item.context || 'work';
+  var ctxLabel = ctx.replace(/_/g, ' ');
+  var proj = item.project;
+  var impactClass = 'card--' + (item.impact_level || 'low');
+
+  return '<div class="card ' + impactClass + '" data-id="' + item.id + '">'
+    + '<div class="card-actions">'
+    + '<button class="action-btn" onclick="openEdit(' + item.id + ')" title="Edit">\u270e Edit</button>'
+    + '<button class="action-btn delete" onclick="deleteItem(' + item.id + ')" title="Delete">\u2715 Delete</button>'
+    + '</div>'
+    + '<div class="card-eyebrow">'
+    + '<span class="card-cat-label" style="color:' + catColor + '">' + esc(item.category) + '</span>'
+    + (proj ? '<span class="card-proj-label">' + esc(proj) + '</span>' : '')
+    + '</div>'
+    + '<div class="card-title">' + esc(item.title) + '</div>'
+    + '<div class="card-description">' + esc(item.description) + '</div>'
+    + '<div class="card-footer">'
+    + '<span class="context-badge ' + contextClass(ctx) + '">' + esc(ctxLabel) + '</span>'
+    + tags
+    + (time ? '<span class="card-time">' + time + '</span>' : '')
+    + '</div>'
+    + '</div>';
 }
 
 function emptyState() {
@@ -1222,4 +1274,5 @@ window.addEventListener('resize', function() {
 
 // ── Init ────────────────────────────────────────────────────────────────
 loadStats();
+loadMonthlySummaries();
 loadData(periodToParams('this_year'));
