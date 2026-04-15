@@ -31,6 +31,7 @@ let debounceTimer = null;
 let currentPage = 1;
 const PAGE_SIZE = 7;
 let monthShown = {};
+let monthlySummaries = {};  // keyed by YYYY-MM
 const MONTH_PAGE_SIZE = 5;
 
 // ── Fetch stats ────────────────────────────────────────────────────────
@@ -48,6 +49,19 @@ async function loadStats() {
 
 function setText(id, val) {
   document.querySelector(`#${id} .value`).textContent = val ?? '—';
+}
+
+async function loadMonthlySummaries() {
+  try {
+    const r = await fetch('/api/monthly-summaries');
+    const list = await r.json();
+    monthlySummaries = {};
+    for (const s of list) {
+      monthlySummaries[s.month] = s;
+    }
+  } catch (_) {
+    monthlySummaries = {};
+  }
 }
 
 // ── Fetch accomplishments ───────────────────────────────────────────────
@@ -150,7 +164,8 @@ function goToPage(n) {
   document.getElementById('content').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-function renderAnnual() {
+async function renderAnnual() {
+  await loadMonthlySummaries();
   if (allData.length === 0) {
     document.getElementById('content').innerHTML = emptyState();
     return;
@@ -182,7 +197,7 @@ function renderAnnual() {
             <span style="color:var(--muted);font-size:0.8rem">▼</span>
           </div>
           <div class="month-cards">
-            ${renderMonthPage(month, items)}
+            ${renderSummaryBanner(monthlySummaries[month] || null)}${renderMonthPage(month, items)}
           </div>
         </div>`;
     }).join('');
@@ -210,6 +225,21 @@ function renderMonthPage(month, items) {
     <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.75rem">${catBadges}</div>
     ${visibleItems.map(renderCard).join('')}
     ${showMore}`;
+}
+
+function renderSummaryBanner(summary) {
+  if (!summary) return '';
+  var stats = summary.stats || {};
+  var keyWins = stats.key_wins || [];
+  var winsHtml = keyWins.map(function(w) {
+    return '<li class="msb-win"><span class="msb-win-title">' + esc(w.title) + '</span>'
+      + '<span class="msb-win-why">' + esc(w.why) + '</span></li>';
+  }).join('');
+  return '<div class="month-summary-banner">'
+    + '<div class="msb-header"><span class="msb-label">Monthly Summary</span></div>'
+    + '<p class="msb-narrative">' + esc(summary.narrative) + '</p>'
+    + (winsHtml ? '<ul class="msb-wins">' + winsHtml + '</ul>' : '')
+    + '</div>';
 }
 
 function showMoreMonth(month) {

@@ -657,3 +657,56 @@ main {
 .btn-save:hover { background: var(--primary-h); }
 
 /* (pie chart replaced by tag intelligence panel) */
+
+/* ── Monthly Summary Banner ── */
+.month-summary-banner {
+  background: var(--primary-bg);
+  border-left: 3px solid var(--primary);
+  border-radius: 0 8px 8px 0;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+}
+.msb-header { margin-bottom: 0.5rem; }
+.msb-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--primary);
+  font-weight: 700;
+}
+.msb-narrative {
+  font-size: 0.88rem;
+  color: var(--text);
+  line-height: 1.6;
+  margin-bottom: 0.75rem;
+}
+.msb-wins {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.msb-win {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding-left: 1rem;
+  position: relative;
+}
+.msb-win::before {
+  content: '✦';
+  position: absolute;
+  left: 0;
+  color: var(--primary);
+  font-size: 0.65rem;
+  top: 0.2rem;
+}
+.msb-win-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.msb-win-why {
+  font-size: 0.75rem;
+  color: var(--muted);
+}

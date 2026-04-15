@@ -183,7 +183,27 @@ mcp = FastMCP(
         "databases (all records are loaded into context). Then call get_merge_candidates with "
         "the file paths, review results carefully — use your judgment to identify near-duplicates "
         "that differ only in wording, ask the user when unsure — then call execute_merge with "
-        "the final curated list. Never skip the review step."
+        "the final curated list. Never skip the review step. "
+
+        "MONTHLY ROLLOVER SUMMARY: After calling log_accomplishment, check "
+        "the response for a needs_summary field. If it is not None: "
+        "(1) Write a 2-4 sentence performance-review-focused narrative from "
+        "the provided records and stats — lead with outcomes and impact, not "
+        "activity, write it as text the user could quote in a self-evaluation. "
+        "(2) Select 2-3 key_wins dicts (each with title and why) using judgment "
+        "— genuine significance, not just high impact_level entries. "
+        "(3) Call store_monthly_summary with the narrative, key_wins, and the "
+        "pre-computed stats from needs_summary.stats (pass stats through unchanged). "
+        "(4) Inform the user briefly: '<Month YYYY> summary saved.' "
+        "Then continue with the original logging response. "
+
+        "MULTI-MONTH PERFORMANCE REVIEW: When the user asks for a review or "
+        "summary covering multiple months (any range — full year, past N months, "
+        "month-to-month), call get_monthly_summaries first with the appropriate "
+        "date_from/date_to range. Build the narrative from those summaries alone. "
+        "Only call get_accomplishments for a specific month if the user asks to "
+        "drill into it or if no summary exists for that month. "
+        "If no summaries exist for the range at all, fall back to get_accomplishments."
     ),
 )
 
@@ -435,6 +455,58 @@ def execute_merge(records: list[dict], output_path: Optional[str] = None) -> dic
     return result
 
 
+@mcp.tool()
+def store_monthly_summary(
+    month: str,
+    narrative: str,
+    key_wins: list[dict],
+    stats: dict,
+) -> dict:
+    """
+    Store a Claude-authored monthly summary after a month rollover is detected.
+
+    Call this when log_accomplishment returns a needs_summary field. Do not
+    call unless that signal is present — summaries are only generated once
+    per month automatically.
+
+    Args:
+        month:     The summarised month in YYYY-MM format (e.g. "2025-03").
+        narrative: 2-4 sentence performance-review-focused narrative.
+                   Lead with outcomes and impact ("Delivered X which enabled Y"),
+                   not activity. Write it as text the user could quote verbatim
+                   in a self-evaluation.
+        key_wins:  List of 2-3 dicts, each with "title" (str) and "why" (str).
+                   Select for genuine significance — cross-team impact, unblocking
+                   others, complex problems solved. Do not mechanically pick
+                   entries that happen to have impact_level=high; use judgment.
+        stats:     Pass through needs_summary.stats unchanged. Do not modify.
+    """
+    return database.store_monthly_summary(DB_PATH, month, narrative, key_wins, stats)
+
+
+@mcp.tool()
+def get_monthly_summaries(
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+) -> list:
+    """
+    Retrieve monthly summaries for a date range.
+
+    Use as the FIRST call in any multi-month performance review — summaries
+    are pre-computed and contain the narrative, key wins, and stats needed
+    to write a complete review without fetching individual records.
+
+    Only call get_accomplishments for a month if the user asks to drill into
+    it specifically, or if no summary exists for that month.
+
+    Args:
+        date_from: Earliest month to include as YYYY-MM (e.g. "2025-01"). Optional.
+        date_to:   Latest month to include as YYYY-MM (e.g. "2025-06"). Optional.
+                   If both are omitted, returns all summaries.
+    """
+    return database.get_monthly_summaries(DB_PATH, date_from, date_to)
+
+
 # ---------------------------------------------------------------------------
 # Web Dashboard (FastAPI)
 # ---------------------------------------------------------------------------
@@ -482,6 +554,16 @@ async def api_summary(period: str):
 @web_app.get("/api/stats")
 async def api_stats():
     return JSONResponse(content=database.get_stats(DB_PATH))
+
+
+@web_app.get("/api/monthly-summaries")
+async def api_monthly_summaries(
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+):
+    return JSONResponse(
+        content=database.get_monthly_summaries(DB_PATH, date_from, date_to)
+    )
 
 
 @web_app.get("/api/settings")
