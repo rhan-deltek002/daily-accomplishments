@@ -85,6 +85,61 @@ def _parse_date_range_end(val) -> int:
     raise ValueError(f"Cannot parse date: {val!r}")
 
 
+def _last_day_of_month(month_str: str) -> str:
+    """Return YYYY-MM-DD for the last day of a YYYY-MM month string."""
+    year, mo = int(month_str[:4]), int(month_str[5:7])
+    if mo == 12:
+        last = date(year + 1, 1, 1) - timedelta(days=1)
+    else:
+        last = date(year, mo + 1, 1) - timedelta(days=1)
+    return last.strftime("%Y-%m-%d")
+
+
+def _compute_month_stats(records: list) -> dict:
+    """Compute stats for a list of accomplishment dicts.
+
+    Returns all stats fields except key_wins — those are written by Claude.
+    """
+    by_category: dict = {}
+    by_impact: dict = {"low": 0, "medium": 0, "high": 0}
+    by_project: dict = {}
+    tag_counts: dict = {}
+
+    for item in records:
+        cat = item.get("category", "other")
+        by_category[cat] = by_category.get(cat, 0) + 1
+        lvl = item.get("impact_level", "medium")
+        by_impact[lvl] = by_impact.get(lvl, 0) + 1
+        proj = item.get("project")
+        if proj:
+            by_project[proj] = by_project.get(proj, 0) + 1
+        for tag in (item.get("tags") or []):
+            t = tag.strip().lower()
+            if t:
+                tag_counts[t] = tag_counts.get(t, 0) + 1
+
+    top_tags = [t for t, _ in sorted(tag_counts.items(), key=lambda x: -x[1])[:10]]
+    high_impact_titles = [item["title"] for item in records if item.get("impact_level") == "high"]
+
+    return {
+        "total": len(records),
+        "by_category": by_category,
+        "by_impact": by_impact,
+        "by_project": by_project,
+        "top_tags": top_tags,
+        "high_impact_titles": high_impact_titles,
+    }
+
+
+def _summary_row_to_dict(row: sqlite3.Row) -> dict:
+    d = dict(row)
+    try:
+        d["stats"] = json.loads(d["stats"]) if d.get("stats") else {}
+    except (json.JSONDecodeError, TypeError):
+        d["stats"] = {}
+    return d
+
+
 def get_conn(db_path: str) -> sqlite3.Connection:
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
@@ -133,6 +188,15 @@ def init_db(db_path: str) -> None:
                     )
         except Exception:
             pass  # Empty table or already migrated
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS monthly_summaries (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                month        TEXT    NOT NULL UNIQUE,
+                narrative    TEXT    NOT NULL,
+                stats        TEXT    NOT NULL DEFAULT '{}',
+                generated_at INTEGER NOT NULL
+            )
+        """)
         conn.commit()
 
 

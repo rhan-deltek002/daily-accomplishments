@@ -332,3 +332,63 @@ class TestExecuteMerge:
         db.execute_merge(records, out)
 
         assert len(db.get_accomplishments(out)) == 3
+
+
+# ---------------------------------------------------------------------------
+# monthly_summaries table
+# ---------------------------------------------------------------------------
+
+def _summary_columns(db_path):
+    conn = sqlite3.connect(db_path)
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(monthly_summaries)")}
+    conn.close()
+    return cols
+
+
+class TestMonthlySummariesTable:
+    def test_fresh_db_has_monthly_summaries_table(self, tmp_db):
+        assert "month" in _summary_columns(tmp_db)
+        assert "narrative" in _summary_columns(tmp_db)
+        assert "stats" in _summary_columns(tmp_db)
+        assert "generated_at" in _summary_columns(tmp_db)
+
+    def test_init_is_idempotent_with_summary_table(self, tmp_db):
+        db.init_db(tmp_db)  # second call must not raise
+        assert "month" in _summary_columns(tmp_db)
+
+    def test_compute_month_stats_counts(self, tmp_db):
+        records = [
+            {"category": "feature", "impact_level": "high",  "project": "app", "tags": ["python"], "title": "A"},
+            {"category": "feature", "impact_level": "medium", "project": "app", "tags": ["python", "api"], "title": "B"},
+            {"category": "bugfix",  "impact_level": "low",    "project": None,  "tags": [], "title": "C"},
+        ]
+        stats = db._compute_month_stats(records)
+        assert stats["total"] == 3
+        assert stats["by_category"]["feature"] == 2
+        assert stats["by_category"]["bugfix"] == 1
+        assert stats["by_impact"]["high"] == 1
+        assert stats["by_impact"]["medium"] == 1
+        assert stats["by_impact"]["low"] == 1
+        assert stats["by_project"]["app"] == 2
+        assert "None" not in stats["by_project"]
+        assert "python" in stats["top_tags"]
+        assert stats["high_impact_titles"] == ["A"]
+
+    def test_compute_month_stats_empty(self):
+        stats = db._compute_month_stats([])
+        assert stats["total"] == 0
+        assert stats["top_tags"] == []
+        assert stats["high_impact_titles"] == []
+
+    def test_last_day_of_month_regular(self):
+        assert db._last_day_of_month("2025-03") == "2025-03-31"
+        assert db._last_day_of_month("2025-04") == "2025-04-30"
+
+    def test_last_day_of_month_december(self):
+        assert db._last_day_of_month("2025-12") == "2025-12-31"
+
+    def test_last_day_of_month_february_leap(self):
+        assert db._last_day_of_month("2024-02") == "2024-02-29"
+
+    def test_last_day_of_month_february_non_leap(self):
+        assert db._last_day_of_month("2025-02") == "2025-02-28"
