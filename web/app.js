@@ -179,12 +179,16 @@ async function renderAnnual() {
     months[month].push(item);
   }
 
-  const html = Object.entries(months)
-    .sort(([a], [b]) => b.localeCompare(a))
-    .map(([month, items]) => {
+  const sortedMonths = Object.entries(months).sort(([a], [b]) => b.localeCompare(a));
+  const currentMonth = tsToMonthKey(Date.now() / 1000);
+
+  const html = sortedMonths.map(([month, items]) => {
       const [year, mo] = month.split('-');
       const label = `${MONTH_NAMES[parseInt(mo, 10) - 1]} ${year}`;
       const high = items.filter(i => i.impact_level === 'high').length;
+      const isCurrentMonth = month === currentMonth;
+      const cardsStyle = isCurrentMonth ? '' : ' style="display:none"';
+      const arrow = isCurrentMonth ? '▼' : '▶';
 
       return `
         <div class="month-section" data-month="${month}">
@@ -194,10 +198,11 @@ async function renderAnnual() {
               <span>${items.length} accomplished</span>
               ${high > 0 ? `<span>🔴 ${high} high-impact</span>` : ''}
             </div>
-            <span style="color:var(--muted);font-size:0.8rem">▼</span>
+            <span class="month-arrow">${arrow}</span>
           </div>
-          <div class="month-cards">
-            ${renderSummaryBanner(monthlySummaries[month] || null)}${renderMonthPage(month, items)}
+          ${renderSummaryBanner(monthlySummaries[month] || null)}
+          <div class="month-cards"${cardsStyle}>
+            ${renderMonthPage(month, items)}
           </div>
         </div>`;
     }).join('');
@@ -591,8 +596,8 @@ function debounceSearch() {
 }
 
 function toggleMonth(header) {
-  const cards = header.nextElementSibling;
-  const arrow = header.querySelector('span:last-child');
+  const cards = header.parentElement.querySelector('.month-cards');
+  const arrow = header.querySelector('.month-arrow');
   const hidden = cards.style.display === 'none';
   cards.style.display = hidden ? '' : 'none';
   arrow.textContent = hidden ? '▼' : '▶';
