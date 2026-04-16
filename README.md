@@ -8,45 +8,67 @@ An MCP server that lets Claude log your daily accomplishments automatically, wit
 
 Instead of manually writing down what you did each day, Claude tracks it for you as you work. At review time, pull up a timeline or annual summary — great for performance reviews or just reflecting on your progress.
 
-- **Logging via Claude** — Claude logs entries using natural language tools as you work
+- **`/da` skill** — unambiguous commands: `/da log`, `/da summary`, `/da review`, `/da search`
 - **Smart deduplication** — checks existing records before logging to avoid duplicates and consolidates related work
 - **Web dashboard** — Timeline view, annual review, and settings in a single lightweight frontend
 - **AI-assisted merge** — if you have databases from multiple machines, Claude can intelligently merge them, identifying near-duplicates
+- **Cross-platform** — works in Claude Code, Gemini CLI, and Codex
 
 Think of it as a *work journal that writes itself.*
 
 ## How it works
 
-1. At the end of any Claude Code session, say: **"Log today's accomplishments"**
-2. Claude analyses the session and calls the MCP tools to record what was done
+1. At the end of any session, run **`/da log`**
+2. Claude reads git history + session context, proposes consolidated entries, and records them on confirmation
 3. Open the dashboard at `http://localhost:8765` to browse your history
-4. At review time: **"Summarize my accomplishments this year"**
+4. At review time: **`/da summary`** or **`/da review`** for a performance-review-ready narrative
 
 ## Requirements
 
 - Python 3.10+
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI (or Gemini CLI / Codex for cross-platform use)
 
 ## Installation
 
-### Step 1: Clone the repo
+### Option A: Plugin install (Claude Code — recommended)
+
+Installs the skill and registers the MCP server automatically.
+
+```bash
+# Register this repo as a marketplace (one time)
+claude plugin marketplace add https://github.com/rhan-deltek002/daily-accomplishments
+
+# Install the plugin
+claude plugin install daily-accomplishments
+```
+
+The MCP server registers itself on first session start. The `/da` skill is available immediately.
+
+To update later:
+```bash
+claude plugin update daily-accomplishments
+```
+
+### Option B: Manual install
+
+#### Step 1: Clone the repo
 
 ```bash
 git clone https://github.com/rhan-deltek002/daily-accomplishments.git
 cd daily-accomplishments
 ```
 
-### Step 2: Install dependencies
+#### Step 2: Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### Step 3: Register the MCP
+#### Step 3: Register the MCP
 
 > **Recommended:** Use the manual command below so you can choose the scope. The install scripts default to **project scope**, meaning the MCP is only active when Claude Code is opened inside this directory — most users want it available everywhere.
 
-#### Recommended: manual install (choose your scope)
+##### Recommended: manual install (choose your scope)
 
 Register with `--scope user` to make it available **across all your projects**:
 
@@ -66,7 +88,7 @@ claude mcp add daily-accomplishments --scope user ^
 
 Use `--scope project` instead if you intentionally want it limited to a single project directory.
 
-#### Quick install scripts (project scope only)
+##### Quick install scripts (project scope only)
 
 These scripts register the MCP at **project scope** — only active when Claude Code is opened inside this directory.
 
@@ -98,6 +120,20 @@ claude mcp remove daily-accomplishments
 | Windows | `%USERPROFILE%\.daily-accomplishments\accomplishments.db` |
 
 The directory is created automatically. To use a different location on Linux/macOS, pass it as an argument to `install.sh` (see above) or set the `ACCOMPLISHMENTS_DB` environment variable. On Windows the default path is always used — to move the database, use the **Settings** page in the dashboard.
+
+## /da Commands
+
+Once installed, use `/da` commands in any Claude Code (or compatible) session:
+
+| Command | What it does |
+|---|---|
+| `/da` | Show today's logged entries + available commands |
+| `/da log` | Infer work from git + session, propose entry, log on confirmation |
+| `/da summary [month]` | Narrative summary for current month (or specified month) |
+| `/da review [month]` | Performance-review-ready narrative, grouped by project |
+| `/da search <query>` | Full-text search across all accomplishments |
+
+`/da log` checks for existing entries before writing — no duplicates.
 
 ## MCP Tools
 

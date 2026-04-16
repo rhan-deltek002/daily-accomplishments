@@ -1,0 +1,6 @@
+{
+  "name": "daily-accomplishments",
+  "description": "Log and review daily accomplishments via /da commands. Provides unambiguous access to daily-accomplishments MCP tools.",
+  "version": "1.0.0",
+  "contextFileName": "GEMINI.md"
+}
