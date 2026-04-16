@@ -1,0 +1,17 @@
+{
+  "name": "daily-accomplishments",
+  "metadata": {
+    "description": "Log and review daily accomplishments with Claude. Records session work, generates summaries, and supports performance review preparation."
+  },
+  "owner": {
+    "name": "Rhanel Candia"
+  },
+  "plugins": [
+    {
+      "name": "daily-accomplishments",
+      "description": "Log and review daily accomplishments via /da commands",
+      "source": "./",
+      "category": "productivity"
+    }
+  ]
+}

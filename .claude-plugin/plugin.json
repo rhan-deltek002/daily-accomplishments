@@ -1,0 +1,21 @@
+{
+  "name": "daily-accomplishments",
+  "description": "Log and review daily accomplishments via /da commands. Provides MCP tools for recording session work and generating summaries.",
+  "author": {
+    "name": "Rhanel Candia"
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/da-mcp-register.sh\"",
+            "timeout": 15,
+            "statusMessage": "Registering daily-accomplishments MCP server..."
+          }
+        ]
+      }
+    ]
+  }
+}
