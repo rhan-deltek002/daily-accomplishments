@@ -23,8 +23,9 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 1
 fi
 
-# Check if already registered (exact word match; stderr visible for real failures)
-if claude mcp list 2>&1 | grep -qw "daily-accomplishments"; then
+# Check if already registered (capture stdout; stderr flows to terminal for real failures)
+mcp_list=$(claude mcp list)
+if echo "$mcp_list" | grep -qw "daily-accomplishments"; then
   exit 0
 fi
 
@@ -35,7 +36,8 @@ pip3 install -r "$PLUGIN_ROOT/requirements.txt" \
   --trusted-host pypi.org --trusted-host files.pythonhosted.org \
   --break-system-packages -q 2>&1 \
   || pip3 install -r "$PLUGIN_ROOT/requirements.txt" \
-     --trusted-host pypi.org --trusted-host files.pythonhosted.org -q
+     --trusted-host pypi.org --trusted-host files.pythonhosted.org -q \
+  || { echo "[da-mcp] ERROR: pip install failed. MCP server not registered." >&2; exit 1; }
 
 # Register MCP server
 claude mcp add daily-accomplishments \
