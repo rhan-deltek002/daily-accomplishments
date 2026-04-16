@@ -29,8 +29,10 @@ Parse `$ARGUMENTS` to determine which command to run:
 
 ## /da (bare — no arguments)
 
-1. Get today's timestamp: run `date +%s` in bash
-2. Call `get_accomplishments` with today's timestamp
+1. Get today's boundaries:
+   - `date_from`: `date -d 'today 00:00:00' +%s` (Linux) or `date -v0H -v0M -v0S +%s` (macOS)
+   - `date_to`: `date +%s`
+2. Call `get_accomplishments` with `date_from` and `date_to`
 3. Display entries as a formatted list (title, description, impact, project)
 4. If no entries: say "No accomplishments logged today yet."
 5. Always append available commands hint:
@@ -45,8 +47,10 @@ Available: /da log · /da summary · /da review · /da search <query>
 
 Goal: record today's session work without duplicates, consolidated into meaningful outcomes.
 
-1. Get today's timestamp: `date +%s`
-2. Call `get_accomplishments` with today's timestamp — note any existing entries
+1. Get today's boundaries:
+   - `date_from`: `date -d 'today 00:00:00' +%s` (Linux) or `date -v0H -v0M -v0S +%s` (macOS)
+   - `date_to`: `date +%s`
+2. Call `get_accomplishments` with `date_from` and `date_to` — note any existing entries
 3. Read git context:
    - `git log --oneline -20` (recent commits)
    - `git diff --stat HEAD~5..HEAD 2>/dev/null || git diff --stat` (changed files)
@@ -68,11 +72,11 @@ Goal: record today's session work without duplicates, consolidated into meaningf
 
 ## /da summary [month]
 
-1. Get current month boundaries if no month specified:
-   - Start: first second of current month (Unix timestamp)
-   - End: current timestamp (`date +%s`)
-2. If month argument given (e.g. `march`, `2026-03`): convert to timestamp range for that month
-3. Call `get_summary` with `start_date`, `end_date`, `include_records=True`
+1. Get target month boundaries:
+   - Default (no argument): `date_from` = first second of current month, `date_to` = `date +%s`
+   - If month argument given (e.g. `march`, `2026-03`): convert to Unix timestamp range for that month
+2. If range spans more than one month: call `get_monthly_summaries` first and build the narrative from those pre-computed summaries. Only call `get_summary` with `include_records=True` if no summary exists for the target month.
+3. For single-month requests: call `get_summary` with `date_from`, `date_to`, `include_records=True`
 4. Present as structured narrative grouped by project
 5. Lead with what was delivered and why it matters
 
@@ -80,7 +84,7 @@ Goal: record today's session work without duplicates, consolidated into meaningf
 
 ## /da review [month]
 
-Same as `/da summary` but framed for performance review:
+Follow the same month boundary and `get_monthly_summaries` / `get_summary` logic as `/da summary`. Then present framed for performance review:
 - Group by project
 - Emphasize outcomes and impact, not activities
 - Use past-tense, first-person ("Delivered...", "Reduced...", "Built...")

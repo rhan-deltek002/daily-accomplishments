@@ -11,7 +11,7 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/da-mcp-register.sh\"",
-            "timeout": 15,
+            "timeout": 60,
             "statusMessage": "Registering daily-accomplishments MCP server..."
           }
         ]

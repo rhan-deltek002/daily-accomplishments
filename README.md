@@ -51,24 +51,24 @@ claude plugin update daily-accomplishments
 
 ### Option B: Manual install
 
-### Step 1: Clone the repo
+#### Step 1: Clone the repo
 
 ```bash
 git clone https://github.com/rhan-deltek002/daily-accomplishments.git
 cd daily-accomplishments
 ```
 
-### Step 2: Install dependencies
+#### Step 2: Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### Step 3: Register the MCP
+#### Step 3: Register the MCP
 
 > **Recommended:** Use the manual command below so you can choose the scope. The install scripts default to **project scope**, meaning the MCP is only active when Claude Code is opened inside this directory — most users want it available everywhere.
 
-#### Recommended: manual install (choose your scope)
+##### Recommended: manual install (choose your scope)
 
 Register with `--scope user` to make it available **across all your projects**:
 
@@ -88,7 +88,7 @@ claude mcp add daily-accomplishments --scope user ^
 
 Use `--scope project` instead if you intentionally want it limited to a single project directory.
 
-#### Quick install scripts (project scope only)
+##### Quick install scripts (project scope only)
 
 These scripts register the MCP at **project scope** — only active when Claude Code is opened inside this directory.
 
