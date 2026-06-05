@@ -57,8 +57,12 @@ Goal: record today's session work without duplicates, consolidated into meaningf
 4. Synthesize session work + git context into candidate accomplishment entries
 5. Consolidate: one entry per distinct meaningful outcome (not per file, not per bug)
 6. If related entries already exist today: prefer `update_accomplishment` over creating duplicates
-7. Present proposed entry/entries to user for confirmation before calling any MCP write tool
-8. On confirmation: call `log_accomplishment` or `update_accomplishment`
+7. Call `log_accomplishment` or `update_accomplishment` immediately — no confirmation step
+8. After each call, display the created/updated entry as a plain-text preview:
+   - **Title:** ...
+   - **Project:** ... | **Context:** ... | **Impact:** ...
+   - **Description:** ...
+   - **Tags:** ...
 
 **Field defaults:**
 - `project`: derived from `git remote get-url origin` (repo name) or folder name

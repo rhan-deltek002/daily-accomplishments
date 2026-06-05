@@ -588,7 +588,8 @@ def get_unsummarized_months(db_path: str) -> list:
             "FROM accomplishments ORDER BY m ASC"
         ).fetchall()
 
-    months = [row[0] for row in month_rows if row[0] not in summarized]
+    current_month = datetime.now(tz=timezone.utc).strftime("%Y-%m")
+    months = [row[0] for row in month_rows if row[0] not in summarized and row[0] != current_month]
 
     result = []
     for month in months:

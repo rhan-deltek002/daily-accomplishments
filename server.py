@@ -175,6 +175,12 @@ mcp = FastMCP(
     instructions=(
         "Use these tools to record and review the user's daily accomplishments. "
 
+        "SESSION START: Call get_unsummarized_months at the beginning of every session. "
+        "If it returns any months, immediately generate and store a summary for each one "
+        "using the same process as the MONTHLY ROLLOVER SUMMARY instructions below — "
+        "write narrative + key_wins, then call store_monthly_summary. "
+        "Do this before any other work. get_unsummarized_months already excludes the current month. "
+
         "All date parameters MUST be Unix timestamps (seconds since epoch, integers). "
         "NEVER pass date strings like 'YYYY-MM-DD'. "
         "To get the current timestamp, run: date +%s in bash. "
